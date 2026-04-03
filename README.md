@@ -142,6 +142,8 @@ codex-keyring auto-account account3 off
 
 Use this when an alias should remain available for manual switching but must never be chosen automatically.
 
+If you manually switch to a `manual-only` alias, `codex-keyring` now turns global auto-switch `off` immediately. When you later move back to an auto-enabled alias, run `codex-keyring auto sequential` or `codex-keyring auto balanced` to re-enable auto-switch.
+
 ### Rename or Remove an Alias
 
 ```bash

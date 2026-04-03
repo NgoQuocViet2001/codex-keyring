@@ -7,7 +7,7 @@ import { captureSnapshot } from "../core/auth-snapshot.js";
 import { runDoctor } from "../core/doctor.js";
 import { reconcileHostFailover } from "../core/host-reconciliation.js";
 import { refreshAllStats, refreshStatsForAlias } from "../core/stats-engine.js";
-import { switchActiveAlias } from "../core/switch-engine.js";
+import { disableAutoSwitchForActiveManualOnlyAlias, switchActiveAlias } from "../core/switch-engine.js";
 
 function textResult(value: unknown) {
   return {
@@ -30,7 +30,7 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
   const server = new Server(
     {
       name: "codex-keyring",
-      version: "0.5.1",
+      version: "0.5.2",
     },
     {
       capabilities: {
@@ -187,11 +187,14 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
         return textResult(await listAccountsWithFreshStats(store));
       case "accounts.switch": {
         const alias = normalizeAlias(String(args?.alias));
-        await switchActiveAlias(store, alias, "manual");
+        const result = await switchActiveAlias(store, alias, "manual");
         return textResult({
           ok: true,
           activeAlias: alias,
-          note: "Codex app and IDE sessions may apply the switched account on the next request or after a session reload.",
+          autoSwitchDisabled: result.autoSwitchDisabled ?? false,
+          note: result.autoSwitchDisabled
+            ? "Auto-switch was turned off because this alias is manual-only. Switch to an auto-enabled alias later and enable auto-switch again when you want it back."
+            : "Codex app and IDE sessions may apply the switched account on the next request or after a session reload.",
         });
       }
       case "accounts.add": {
@@ -235,7 +238,14 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
       case "accounts.set_auto_participation": {
         const alias = normalizeAlias(String(args?.alias));
         const meta = await store.setManualOnly(alias, !Boolean(args?.enabled));
-        return textResult(meta);
+        const autoSwitchDisabled = meta.manualOnly ? await disableAutoSwitchForActiveManualOnlyAlias(store, alias) : false;
+        return textResult({
+          ...meta,
+          autoSwitchDisabled,
+          note: autoSwitchDisabled
+            ? "Auto-switch was turned off because the active alias is now manual-only."
+            : undefined,
+        });
       }
       case "accounts.status":
         return textResult(await getStatusView(store));

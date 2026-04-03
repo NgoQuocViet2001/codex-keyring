@@ -8,7 +8,7 @@ import { captureSnapshot } from "../../core/auth-snapshot.js";
 import { runDoctor } from "../../core/doctor.js";
 import { syncHostSignalsReadOnly } from "../../core/host-reconciliation.js";
 import { refreshAllStats, refreshStatsForAlias } from "../../core/stats-engine.js";
-import { switchActiveAlias } from "../../core/switch-engine.js";
+import { disableAutoSwitchForActiveManualOnlyAlias, switchActiveAlias } from "../../core/switch-engine.js";
 import type { AutoSwitchMode } from "../../core/types.js";
 import { createCodexInvocation } from "../../platform/codex-home.js";
 import type { CliContext } from "../context.js";
@@ -51,6 +51,11 @@ function assertAutoSwitchMode(value: string): AutoSwitchMode {
 
 function formatSwitchingMode(manualOnly: boolean): string {
   return manualOnly ? "manual-only" : "auto";
+}
+
+function printManualOnlyAutoSwitchNotice(): void {
+  console.log("Auto-switch mode was turned off because the active alias is manual-only.");
+  console.log("If you later switch to an alias that supports auto-switch, run `codex-keyring auto sequential` or `codex-keyring auto balanced` to turn it back on.");
 }
 
 async function runCodexLogin(tempHome: string, deviceAuth: boolean): Promise<void> {
@@ -248,6 +253,12 @@ export function registerAccountCommands(program: Command, context: CliContext): 
 
       const meta = await context.store.setManualOnly(normalizedAlias, normalizedMode === "off");
       console.log(`${meta.alias} is now ${meta.manualOnly ? "manual-only" : "eligible"} for auto-switch.`);
+      if (meta.manualOnly) {
+        const autoSwitchDisabled = await disableAutoSwitchForActiveManualOnlyAlias(context.store, meta.alias);
+        if (autoSwitchDisabled) {
+          printManualOnlyAutoSwitchNotice();
+        }
+      }
     });
 
   program
@@ -311,10 +322,13 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("<alias>", "Alias to activate")
     .action(async (alias: string) => {
       const normalizedAlias = normalizeAlias(alias);
-      await switchActiveAlias(context.store, normalizedAlias, "manual");
+      const result = await switchActiveAlias(context.store, normalizedAlias, "manual");
       await refreshStatsForAlias(context.store, normalizedAlias);
       console.log(`Active Codex account switched to ${normalizedAlias}.`);
       console.log("New CLI processes use the switched account immediately. Codex app and IDE sessions may apply it on the next request or after a session reload.");
+      if (result.autoSwitchDisabled) {
+        printManualOnlyAutoSwitchNotice();
+      }
     });
 
   program

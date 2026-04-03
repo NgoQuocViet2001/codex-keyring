@@ -142,6 +142,8 @@ codex-keyring auto-account account3 off
 
 Dùng cách này khi alias vẫn cần giữ để switch tay, nhưng không bao giờ được phép bị chọn bởi auto-switch.
 
+Nếu bạn switch tay sang một alias `manual-only`, `codex-keyring` giờ sẽ tắt luôn auto-switch toàn cục. Khi sau này chuyển lại sang alias có hỗ trợ auto-switch, bạn cần tự bật lại bằng `codex-keyring auto sequential` hoặc `codex-keyring auto balanced`.
+
 ### Đổi Tên hoặc Xóa Alias
 
 ```bash

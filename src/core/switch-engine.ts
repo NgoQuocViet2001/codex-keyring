@@ -15,20 +15,34 @@ export async function switchActiveAlias(
   store: AccountStore,
   alias: string,
   reason: FailoverReason | "manual" = "manual",
-): Promise<{ backupPath?: string }> {
+): Promise<{ backupPath?: string; autoSwitchDisabled?: boolean }> {
   const state = await store.getState();
-  if (state.activeAlias === alias) {
-    return {};
-  }
-
+  const meta = await store.getMeta(alias);
   const snapshot = await store.getSnapshot(alias);
   const previousActiveAlias = state.activeAlias;
+
+  if (state.activeAlias === alias) {
+    const autoSwitchDisabled = meta.manualOnly && state.autoSwitchMode !== "off";
+    if (autoSwitchDisabled) {
+      state.autoSwitch = false;
+      state.autoSwitchMode = "off";
+      await store.saveState(state);
+    }
+    return {
+      autoSwitchDisabled,
+    };
+  }
 
   return withFileLock(store.authLockPath(), async () => {
     const backupPath = await store.backupExistingActiveAuth();
     await atomicWrite(store.env.codexAuthPath, `${JSON.stringify(snapshot.auth, null, 2)}\n`);
 
     state.activeAlias = alias;
+    const autoSwitchDisabled = meta.manualOnly && state.autoSwitchMode !== "off";
+    if (autoSwitchDisabled) {
+      state.autoSwitch = false;
+      state.autoSwitchMode = "off";
+    }
     state.lastSwitchAt = new Date().toISOString();
     await store.saveState(state);
     await store.updateLastUsed(alias);
@@ -41,11 +55,24 @@ export async function switchActiveAlias(
       details: {
         previousActiveAlias,
         backupPath,
+        autoSwitchDisabled,
       },
     });
 
-    return { backupPath };
+    return { backupPath, autoSwitchDisabled };
   });
+}
+
+export async function disableAutoSwitchForActiveManualOnlyAlias(store: AccountStore, alias: string): Promise<boolean> {
+  const [state, meta] = await Promise.all([store.getState(), store.getMeta(alias)]);
+  if (state.activeAlias !== meta.alias || !meta.manualOnly || state.autoSwitchMode === "off") {
+    return false;
+  }
+
+  state.autoSwitch = false;
+  state.autoSwitchMode = "off";
+  await store.saveState(state);
+  return true;
 }
 
 export async function restoreLastBackup(store: AccountStore): Promise<boolean> {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Turn global auto-switch `off` automatically when the active alias becomes `manual-only`, including after a manual `switch` or `auto-account <alias> off`
+- Return a clearer notice in CLI and MCP responses so users know they must re-enable auto-switch manually after moving back to an auto-enabled alias
+
 ## 0.5.1
 
 - Make `list`, `status`, `stats`, and `info` sync fresh Codex host quota signals before rendering, so recovered 5-hour and weekly headroom show up much closer to real time
