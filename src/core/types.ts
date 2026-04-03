@@ -1,11 +1,13 @@
 export type AuthMode = "chatgpt" | "api_key" | "unknown";
 export type ConfidenceLevel = "exact" | "estimated" | "manual";
 export type HealthState = "active" | "ready" | "cooldown" | "degraded" | "unknown";
+export type AutoSwitchMode = "balanced" | "sequential";
 export type FailoverReason =
   | "quota-exhausted"
   | "rate-limited"
   | "auth-expired"
   | "workspace-mismatch"
+  | "quota-rebalance"
   | "manual"
   | "unknown";
 
@@ -37,6 +39,23 @@ export interface ManualWindowConfig {
   resetHint?: string;
 }
 
+export interface QuotaWindowSnapshot {
+  usedPercent: number;
+  remainingPercent: number;
+  windowMinutes: number;
+  resetAfterSeconds?: number;
+  resetAt?: string;
+}
+
+export interface QuotaSnapshot {
+  capturedAt: string;
+  source: "codex-host-log" | "exec-output";
+  activeLimit?: string;
+  planType?: string;
+  primary?: QuotaWindowSnapshot;
+  secondary?: QuotaWindowSnapshot;
+}
+
 export interface AccountMeta {
   alias: string;
   displayName: string;
@@ -59,6 +78,7 @@ export interface CodexKeyringState {
   updatedAt: string;
   activeAlias?: string;
   autoSwitch: boolean;
+  autoSwitchMode: AutoSwitchMode;
   managedAuthMode: boolean;
   lastSwitchAt?: string;
   originalCliAuthCredentialsStore?: string;
@@ -80,6 +100,7 @@ export interface SwitchEvent {
     | "rename-account"
     | "switch"
     | "limit-hit"
+    | "quota-observed"
     | "exec-success"
     | "exec-failure"
     | "doctor";
@@ -98,6 +119,14 @@ export interface AccountStats {
   lastLimitHitAt?: string;
   cooldownUntil?: string;
   lastRefresh?: string;
+  quotaObservedAt?: string;
+  quotaSource?: QuotaSnapshot["source"];
+  limit5hUsedPercent?: number;
+  limit5hRemainingPercent?: number;
+  limit5hResetAt?: string;
+  limitWeekUsedPercent?: number;
+  limitWeekRemainingPercent?: number;
+  limitWeekResetAt?: string;
   estimatedRequestsThisWindow?: number;
   estimatedTokensThisWindow?: number;
   windowType: string;

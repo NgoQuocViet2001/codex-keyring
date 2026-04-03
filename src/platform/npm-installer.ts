@@ -9,6 +9,10 @@ const COPY_ITEMS = [".codex-plugin", ".mcp.json", "assets", "skills"];
 const PLUGIN_DIR_NAME = "codex-keyring";
 const LEGACY_PLUGIN_DIR_NAME = "codex-accounts";
 
+function pluginCachePath(store: AccountStore, pluginDirName: string): string {
+  return path.join(store.env.codexPluginsDir, "cache", "local-user-plugins", pluginDirName);
+}
+
 export async function copyPluginPayload(packageRoot: string, pluginDir: string): Promise<void> {
   await mkdir(pluginDir, { recursive: true });
 
@@ -28,8 +32,14 @@ export async function installPlugin(
   const packageRoot = await resolvePackageRoot(fromPath, COPY_ITEMS);
   const pluginPath = path.join(store.env.codexPluginsDir, PLUGIN_DIR_NAME);
   const legacyPluginPath = path.join(store.env.codexPluginsDir, LEGACY_PLUGIN_DIR_NAME);
+  const pluginCache = pluginCachePath(store, PLUGIN_DIR_NAME);
+  const legacyPluginCache = pluginCachePath(store, LEGACY_PLUGIN_DIR_NAME);
   await copyPluginPayload(packageRoot, pluginPath);
-  await rm(legacyPluginPath, { recursive: true, force: true });
+  await Promise.all([
+    rm(pluginCache, { recursive: true, force: true }),
+    rm(legacyPluginPath, { recursive: true, force: true }),
+    rm(legacyPluginCache, { recursive: true, force: true }),
+  ]);
   await ensurePersonalMarketplaceEntry(store.env);
 
   const state = await store.getState();
@@ -64,9 +74,13 @@ export async function installPlugin(
 export async function uninstallPlugin(store: AccountStore): Promise<void> {
   const pluginPath = path.join(store.env.codexPluginsDir, PLUGIN_DIR_NAME);
   const legacyPluginPath = path.join(store.env.codexPluginsDir, LEGACY_PLUGIN_DIR_NAME);
+  const pluginCache = pluginCachePath(store, PLUGIN_DIR_NAME);
+  const legacyPluginCache = pluginCachePath(store, LEGACY_PLUGIN_DIR_NAME);
   await Promise.all([
     rm(pluginPath, { recursive: true, force: true }),
     rm(legacyPluginPath, { recursive: true, force: true }),
+    rm(pluginCache, { recursive: true, force: true }),
+    rm(legacyPluginCache, { recursive: true, force: true }),
   ]);
   await removePersonalMarketplaceEntry(store.env);
 

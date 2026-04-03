@@ -9,7 +9,8 @@ It stays close to the official Codex experience:
 - add accounts through the official `codex login` flow
 - store account snapshots under simple aliases
 - switch the active Codex auth cache atomically
-- enable auto-switch for supported host-side failures
+- surface the most useful quota signals, especially 5-hour and weekly remaining limits
+- enable auto-switch with `balanced` and `sequential` quota-aware modes
 - install a local plugin and MCP server for Codex app and IDE usage
 
 For Vietnamese documentation, see [README.vi.md](./README.vi.md).
@@ -32,7 +33,7 @@ After installation, `Codex Keyring` is available as a plugin inside Codex app an
 
 You can ask a Codex agent to inspect accounts, switch aliases, rename aliases, run `doctor`, or guide the next step for you through natural-language requests.
 
-When auto-switch is enabled, `Codex Keyring` also does best-effort reconciliation from recent Codex host failures so the next request or reopened session can move away from a limited alias.
+When auto-switch is enabled, `Codex Keyring` also does best-effort reconciliation from recent Codex host quota signals so the next request or reopened session can move away from a limited alias.
 
 ## Quick Start For Multi-Account Switching
 
@@ -47,7 +48,7 @@ codex-keyring status
 
 `account1` and `account2` are example aliases. Replace them with names that match the accounts you want to manage, such as `alice-work`, `alice-personal`, or `ngoquocviet2001`.
 
-This captures the current Codex login as `account1`, signs into another account as `account2`, then lets you inspect accounts, switch manually, or prepare for auto-switch failover.
+This captures the current Codex login as `account1`, signs into another account as `account2`, then lets you inspect accounts, switch manually, or prepare for quota-aware auto-switch failover. The default CLI view now highlights `5h left` and `week left` when Codex has exposed exact local quota data.
 
 ## Use In Codex App And IDE
 
@@ -116,11 +117,16 @@ codex-keyring switch account1
 ### Enable Auto-Switch Failover
 
 ```bash
-codex-keyring auto on
+codex-keyring auto on --mode balanced
 codex-keyring exec codex -- --help
 ```
 
-`auto-switch` switches the active auth cache and retries a fresh process exactly once in `codex-keyring exec`.
+There are two auto-switch modes:
+
+- `balanced` is the default. It tries to spread 5-hour quota before an account hits the wall. If the active alias drops below practical thresholds and another alias has more headroom, `codex-keyring` switches early.
+- `sequential` keeps the current alias until it is effectively blocked, then moves to the best alias still known to have quota.
+
+`codex-keyring exec` can now switch the active auth cache as soon as a live CLI session emits a supported quota or auth failure. If the process still exits, it retries one fresh process exactly once after the failover.
 
 For Codex app and the IDE extension, `codex-keyring` also reconciles recent host-side quota, rate-limit, auth-expiry, and workspace-mismatch signals so the next request or reopened session can pick up another alias. In-flight requests still do not continue seamlessly after the failure that already happened.
 
@@ -147,17 +153,17 @@ Removing the active alias requires `--force`.
 
 | Command | Purpose | Notes |
 | --- | --- | --- |
-| `codex-keyring list` | list aliases and health | supports `--json` |
-| `codex-keyring status` | show active alias and managed mode | supports `--json` |
+| `codex-keyring list` | list aliases and health | default table highlights `5h left` and `week left`; supports `--json` |
+| `codex-keyring status` | show active alias and managed mode | includes auto-switch mode and quota summary; supports `--json` |
 | `codex-keyring info <alias>` | show safe details for one alias | includes email, organization, and plan details when available |
-| `codex-keyring stats [alias]` | show stats for one or all aliases | supports `--json` |
+| `codex-keyring stats [alias]` | show quota-aware stats for one or all aliases | includes 5-hour and weekly quota when known; supports `--json` |
 | `codex-keyring add <alias>` | add an alias through official login | browser OAuth by default |
 | `codex-keyring add <alias> --device-auth` | add an alias through official device auth | may be blocked by org policy |
 | `codex-keyring add <alias> --from-active` | capture the current active auth | no new login |
 | `codex-keyring switch <alias>` | make an alias active | atomic and backup-aware |
 | `codex-keyring remove <alias>` | remove an alias | active alias requires `--force` |
 | `codex-keyring rename <old> <new>` | rename an alias | preserves snapshot |
-| `codex-keyring auto on\|off` | enable or disable auto-switch | off by default |
+| `codex-keyring auto on\|off --mode balanced\|sequential` | enable or disable auto-switch | `balanced` is the default |
 | `codex-keyring exec -- <command>` | run a command with failover support | retries once after a supported switch |
 | `codex-keyring install` | install the plugin and enable managed mode | supports `--no-manage-auth` |
 | `codex-keyring uninstall` | remove the plugin from the marketplace | store data remains |

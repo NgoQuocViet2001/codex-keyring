@@ -1,7 +1,7 @@
 import { extractAuthIdentity } from "./auth-snapshot.js";
 import type { AccountStore } from "./account-store.js";
 import { refreshAllStats, refreshStatsForAlias } from "./stats-engine.js";
-import type { AuthMode, CodexKeyringState, ConfidenceLevel, HealthState } from "./types.js";
+import type { AuthMode, AutoSwitchMode, CodexKeyringState, ConfidenceLevel, HealthState } from "./types.js";
 
 export interface PublicAccountView {
   alias: string;
@@ -22,6 +22,14 @@ export interface PublicAccountView {
   lastLimitHitAt?: string;
   cooldownUntil?: string;
   lastRefresh?: string;
+  quotaObservedAt?: string;
+  quotaSource?: "codex-host-log" | "exec-output";
+  limit5hUsedPercent?: number;
+  limit5hRemainingPercent?: number;
+  limit5hResetAt?: string;
+  limitWeekUsedPercent?: number;
+  limitWeekRemainingPercent?: number;
+  limitWeekResetAt?: string;
   estimatedRequestsThisWindow?: number;
   estimatedTokensThisWindow?: number;
   windowType?: string;
@@ -37,11 +45,13 @@ export interface StatusAliasView {
   authMode: AuthMode;
   health: HealthState;
   confidence: ConfidenceLevel;
+  limit5hRemainingPercent?: number;
+  limitWeekRemainingPercent?: number;
   fingerprint: string;
 }
 
 export interface StatusView {
-  state: CodexKeyringState;
+  state: CodexKeyringState & { autoSwitchMode: AutoSwitchMode };
   aliases: StatusAliasView[];
 }
 
@@ -91,6 +101,14 @@ function toPublicAccountView(record: {
     lastLimitHitAt?: string;
     cooldownUntil?: string;
     lastRefresh?: string;
+    quotaObservedAt?: string;
+    quotaSource?: "codex-host-log" | "exec-output";
+    limit5hUsedPercent?: number;
+    limit5hRemainingPercent?: number;
+    limit5hResetAt?: string;
+    limitWeekUsedPercent?: number;
+    limitWeekRemainingPercent?: number;
+    limitWeekResetAt?: string;
     estimatedRequestsThisWindow?: number;
     estimatedTokensThisWindow?: number;
     windowType?: string;
@@ -120,6 +138,14 @@ function toPublicAccountView(record: {
     lastLimitHitAt: record.stats?.lastLimitHitAt,
     cooldownUntil: record.stats?.cooldownUntil,
     lastRefresh: record.stats?.lastRefresh,
+    quotaObservedAt: record.stats?.quotaObservedAt,
+    quotaSource: record.stats?.quotaSource,
+    limit5hUsedPercent: record.stats?.limit5hUsedPercent,
+    limit5hRemainingPercent: record.stats?.limit5hRemainingPercent,
+    limit5hResetAt: record.stats?.limit5hResetAt,
+    limitWeekUsedPercent: record.stats?.limitWeekUsedPercent,
+    limitWeekRemainingPercent: record.stats?.limitWeekRemainingPercent,
+    limitWeekResetAt: record.stats?.limitWeekResetAt,
     estimatedRequestsThisWindow: record.stats?.estimatedRequestsThisWindow,
     estimatedTokensThisWindow: record.stats?.estimatedTokensThisWindow,
     windowType: record.stats?.windowType,
@@ -146,6 +172,8 @@ export async function getStatusView(store: AccountStore): Promise<StatusView> {
       authMode: account.authMode,
       health: account.health,
       confidence: account.confidence,
+      limit5hRemainingPercent: account.limit5hRemainingPercent,
+      limitWeekRemainingPercent: account.limitWeekRemainingPercent,
       fingerprint: account.fingerprint,
     })),
   };

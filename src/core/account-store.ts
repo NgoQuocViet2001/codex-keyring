@@ -36,7 +36,16 @@ function defaultState(): CodexKeyringState {
     createdAt: timestamp,
     updatedAt: timestamp,
     autoSwitch: false,
+    autoSwitchMode: "balanced",
     managedAuthMode: false,
+  };
+}
+
+function normalizeState(state: CodexKeyringState): CodexKeyringState {
+  return {
+    ...state,
+    autoSwitch: Boolean(state.autoSwitch),
+    autoSwitchMode: state.autoSwitchMode === "sequential" ? "sequential" : "balanced",
   };
 }
 
@@ -173,10 +182,11 @@ export class AccountStore {
 
   async getState(): Promise<CodexKeyringState> {
     await this.ensureStore();
-    return readJsonFile<CodexKeyringState>(this.statePath());
+    return normalizeState(await readJsonFile<CodexKeyringState>(this.statePath()));
   }
 
   async saveState(nextState: CodexKeyringState): Promise<void> {
+    nextState = normalizeState(nextState);
     nextState.updatedAt = now();
     await writeJsonFile(this.statePath(), nextState);
   }
@@ -222,6 +232,24 @@ export class AccountStore {
 
   async getMeta(alias: string): Promise<AccountMeta> {
     return readJsonFile<AccountMeta>(this.metaPath(alias));
+  }
+
+  async mergeMeta(
+    alias: string,
+    patch: Partial<Pick<AccountMeta, "email" | "organization" | "planType" | "notes" | "displayName">>,
+  ): Promise<AccountMeta> {
+    const normalizedAlias = normalizeAlias(alias);
+    const current = await this.getMeta(normalizedAlias);
+    const next: AccountMeta = {
+      ...current,
+      ...Object.fromEntries(
+        Object.entries(patch).filter((entry): entry is [keyof typeof patch, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
+      ),
+      updatedAt: now(),
+    };
+
+    await writeJsonFile(this.metaPath(normalizedAlias), next);
+    return next;
   }
 
   async getStats(alias: string): Promise<AccountStats | undefined> {

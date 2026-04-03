@@ -3,12 +3,15 @@ import { pathExists } from "../platform/codex-home.js";
 import type { AccountStore } from "./account-store.js";
 import { extractAuthIdentity } from "./auth-snapshot.js";
 import { classifyFailure, pickNextAlias, shouldAutoSwitch } from "./failover-engine.js";
+import { extractQuotaSnapshotFromText } from "./quota-snapshot.js";
 import { refreshAllStats } from "./stats-engine.js";
 import { switchActiveAlias } from "./switch-engine.js";
 import type { AccountRecord, FailoverReason } from "./types.js";
 
 const BOOTSTRAP_LOOKBACK_ROWS = 5_000;
-const MAX_QUERY_ROWS = 5_000;
+const HISTORICAL_BACKFILL_LOOKBACK_ROWS = 1_000_000;
+const OVERLAP_LOOKBACK_ROWS = 25_000;
+const MAX_QUERY_ROWS = 20_000;
 const MAX_CONTEXT_ID_DISTANCE = 500;
 const MAX_CONTEXT_AGE_SECONDS = 120;
 
@@ -39,7 +42,10 @@ interface HostLogReadResult {
 
 interface ParsedHostLogRow extends HostLogRow {
   directEmail?: string;
+  contextEmail?: string;
   reason?: FailoverReason;
+  quotaSnapshot?: ReturnType<typeof extractQuotaSnapshotFromText>;
+  resolvedAlias?: string;
 }
 
 interface HostFailureCandidate {
@@ -47,6 +53,14 @@ interface HostFailureCandidate {
   reason: FailoverReason;
   row: HostLogRow;
   email?: string;
+  quotaSnapshot?: ReturnType<typeof extractQuotaSnapshotFromText>;
+}
+
+interface HostQuotaObservation {
+  alias: string;
+  row: HostLogRow;
+  email?: string;
+  quotaSnapshot: NonNullable<ReturnType<typeof extractQuotaSnapshotFromText>>;
 }
 
 export interface HostReconciliationResult {
@@ -82,6 +96,46 @@ function extractEmailFromHostLog(body: string): string | undefined {
   }
 
   return undefined;
+}
+
+function isHostNoise(body: string): boolean {
+  const noisePatterns = [
+    /response\.function_call_arguments/i,
+    /response\.output_item\.done/i,
+    /response\.completed/i,
+    /toolcall:\s*shell_command/i,
+    /event\.name="codex\.tool_result"/i,
+    /handle_tool_call/i,
+  ];
+
+  return noisePatterns.some((pattern) => pattern.test(body));
+}
+
+function isHostSignalRow(body: string): boolean {
+  if (isHostNoise(body)) {
+    return false;
+  }
+
+  const signalPatterns = [
+    /user\.email=/i,
+    /user\.email"/i,
+    /event\.kind=codex\.rate_limits/i,
+    /"type":"codex\.rate_limits"/i,
+    /received message \{"type":"error"/i,
+    /websocket event: \{"type":"error"/i,
+    /status_code":429/i,
+    /status_code":401/i,
+    /usage_limit_reached/i,
+    /workspace mismatch/i,
+    /workspace policy/i,
+    /rbac/i,
+    /permission denied/i,
+    /organization policy/i,
+    /expired token/i,
+    /unauthorized/i,
+  ];
+
+  return signalPatterns.some((pattern) => pattern.test(body));
 }
 
 function toHostLogRow(row: RawHostLogRow): HostLogRow {
@@ -131,7 +185,14 @@ async function readHostLogRowsFromSqlite(store: AccountStore): Promise<HostLogRe
       return { available: true, latestId, rows: [] };
     }
 
-    const afterId = hostState.lastProcessedId ?? Math.max(0, latestId - BOOTSTRAP_LOOKBACK_ROWS);
+    const records = await store.listAccounts();
+    const needsHistoricalBackfill = records.some((record) => record.stats?.limit5hRemainingPercent === undefined);
+    const lookbackRows = hostState.lastProcessedId === undefined
+      ? BOOTSTRAP_LOOKBACK_ROWS
+      : needsHistoricalBackfill
+        ? HISTORICAL_BACKFILL_LOOKBACK_ROWS
+        : OVERLAP_LOOKBACK_ROWS;
+    const afterId = Math.max(0, latestId - lookbackRows);
     const rows = db
       .prepare(
         `SELECT id, ts, thread_id, process_uuid, feedback_log_body
@@ -140,14 +201,17 @@ async function readHostLogRowsFromSqlite(store: AccountStore): Promise<HostLogRe
            AND feedback_log_body IS NOT NULL
            AND (
              feedback_log_body LIKE '%user.email%'
+             OR feedback_log_body LIKE '%event.kind=codex.rate_limits%'
+             OR feedback_log_body LIKE '%"type":"codex.rate_limits"%'
+             OR feedback_log_body LIKE '%"type":"error"%'
              OR feedback_log_body LIKE '%usage_limit_reached%'
-             OR feedback_log_body LIKE '%usage limit%'
              OR feedback_log_body LIKE '%status_code\":429%'
-             OR feedback_log_body LIKE '%rate limit%'
-             OR feedback_log_body LIKE '%quota%'
+             OR feedback_log_body LIKE '%status_code\":401%'
              OR feedback_log_body LIKE '%expired token%'
              OR feedback_log_body LIKE '%unauthorized%'
              OR feedback_log_body LIKE '%rbac%'
+             OR feedback_log_body LIKE '%workspace mismatch%'
+             OR feedback_log_body LIKE '%workspace policy%'
              OR feedback_log_body LIKE '%organization policy%'
              OR feedback_log_body LIKE '%permission denied%'
          )
@@ -210,6 +274,44 @@ function findNearestContextEmail(target: ParsedHostLogRow, rows: ParsedHostLogRo
   return best?.email;
 }
 
+function findNearestResolvedAlias(target: ParsedHostLogRow, rows: ParsedHostLogRow[]): string | undefined {
+  let best: { alias: string; score: number } | undefined;
+
+  for (const candidate of rows) {
+    if (!candidate.resolvedAlias || candidate.id === target.id) {
+      continue;
+    }
+
+    const timeDistance = Math.abs(candidate.ts - target.ts);
+    if (timeDistance > MAX_CONTEXT_AGE_SECONDS) {
+      continue;
+    }
+
+    let channelWeight: number | undefined;
+    if (target.threadId && candidate.threadId && target.threadId === candidate.threadId) {
+      channelWeight = 0;
+    } else if (target.processUuid && candidate.processUuid && target.processUuid === candidate.processUuid) {
+      channelWeight = 10_000;
+    }
+
+    if (channelWeight === undefined) {
+      continue;
+    }
+
+    const idDistance = Math.abs(candidate.id - target.id);
+    if (idDistance > MAX_CONTEXT_ID_DISTANCE) {
+      continue;
+    }
+
+    const score = channelWeight + idDistance;
+    if (!best || score < best.score) {
+      best = { alias: candidate.resolvedAlias, score };
+    }
+  }
+
+  return best?.alias;
+}
+
 function aliasFromEmail(email: string | undefined, records: AccountRecord[]): string | undefined {
   const normalized = normalizeEmail(email);
   if (!normalized) {
@@ -227,23 +329,74 @@ function aliasFromEmail(email: string | undefined, records: AccountRecord[]): st
   })?.meta.alias;
 }
 
-function buildHostFailureCandidates(rows: HostLogRow[], records: AccountRecord[]): HostFailureCandidate[] {
-  const parsedRows = rows.map((row: HostLogRow) => ({
+function buildActiveAliasResolver(state: Awaited<ReturnType<AccountStore["getState"]>>, events: Awaited<ReturnType<AccountStore["listEvents"]>>) {
+  const switches = events
+    .filter((event) => event.type === "switch" && typeof event.alias === "string")
+    .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+
+  const initialAlias =
+    typeof switches[0]?.details?.previousActiveAlias === "string"
+      ? switches[0].details.previousActiveAlias
+      : state.activeAlias;
+
+  return (timestamp: number): string | undefined => {
+    let activeAlias = initialAlias;
+    for (const event of switches) {
+      if (Date.parse(event.timestamp) > timestamp) {
+        break;
+      }
+      activeAlias = event.alias;
+    }
+    return activeAlias;
+  };
+}
+
+function buildParsedRows(
+  rows: HostLogRow[],
+  records: AccountRecord[],
+  activeAliasAtTimestamp: (timestamp: number) => string | undefined,
+): ParsedHostLogRow[] {
+  const filteredRows = rows.filter((row) => isHostSignalRow(row.body));
+  const allowSingleAliasFallback = records.length === 1 ? records[0]?.meta.alias : undefined;
+  const parsedRows: ParsedHostLogRow[] = filteredRows.map((row: HostLogRow) => ({
     ...row,
     directEmail: extractEmailFromHostLog(row.body),
     reason: classifyFailure(row.body),
+    quotaSnapshot: extractQuotaSnapshotFromText(row.body, new Date(row.ts * 1_000).toISOString()),
   }));
 
+  for (const row of parsedRows) {
+    row.contextEmail = row.directEmail ?? findNearestContextEmail(row, parsedRows);
+    row.resolvedAlias =
+      aliasFromEmail(row.contextEmail, records) ??
+      activeAliasAtTimestamp(row.ts * 1_000) ??
+      (row.contextEmail ? undefined : allowSingleAliasFallback);
+  }
+
+  for (const row of parsedRows) {
+    if (row.resolvedAlias) {
+      continue;
+    }
+
+    row.resolvedAlias =
+      findNearestResolvedAlias(row, parsedRows) ??
+      activeAliasAtTimestamp(row.ts * 1_000) ??
+      allowSingleAliasFallback;
+  }
+
+  return parsedRows;
+}
+
+function buildHostFailureCandidatesFromParsedRows(parsedRows: ParsedHostLogRow[]): HostFailureCandidate[] {
   const candidates: HostFailureCandidate[] = [];
-  const allowSingleAliasFallback = records.length === 1 ? records[0]?.meta.alias : undefined;
 
   for (const row of parsedRows) {
     if (!row.reason || !shouldAutoSwitch(row.reason)) {
       continue;
     }
 
-    const email = row.directEmail ?? findNearestContextEmail(row, parsedRows);
-    const resolvedAlias = aliasFromEmail(email, records) ?? (email ? undefined : allowSingleAliasFallback);
+    const email = row.contextEmail;
+    const resolvedAlias = row.resolvedAlias;
     if (!resolvedAlias) {
       continue;
     }
@@ -253,10 +406,54 @@ function buildHostFailureCandidates(rows: HostLogRow[], records: AccountRecord[]
       reason: row.reason,
       row,
       email,
+      quotaSnapshot: row.quotaSnapshot,
     });
   }
 
   return candidates;
+}
+
+function buildHostQuotaObservationsFromParsedRows(parsedRows: ParsedHostLogRow[]): HostQuotaObservation[] {
+  const observations: HostQuotaObservation[] = [];
+
+  for (const row of parsedRows) {
+    if (!row.quotaSnapshot) {
+      continue;
+    }
+
+    const email = row.contextEmail;
+    const resolvedAlias = row.resolvedAlias;
+    if (!resolvedAlias) {
+      continue;
+    }
+
+    observations.push({
+      alias: resolvedAlias,
+      row,
+      email,
+      quotaSnapshot: row.quotaSnapshot,
+    });
+  }
+
+  return observations;
+}
+
+async function enrichAccountIdentityHints(
+  store: AccountStore,
+  alias: string,
+  details: {
+    email?: string;
+    planType?: string;
+  },
+): Promise<void> {
+  if (!details.email && !details.planType) {
+    return;
+  }
+
+  await store.mergeMeta(alias, {
+    email: details.email,
+    planType: details.planType,
+  });
 }
 
 export async function reconcileHostFailover(
@@ -290,10 +487,13 @@ export async function reconcileHostFailover(
     };
   }
 
-  const records = await store.listAccounts();
-  const candidates = buildHostFailureCandidates(sourceResult.rows, records);
   const existingEvents = await store.listEvents(undefined, 5_000);
-  const existingHostLogIds = new Set(
+  const records = await store.listAccounts();
+  const activeAliasAtTimestamp = buildActiveAliasResolver(state, existingEvents);
+  const parsedRows = buildParsedRows(sourceResult.rows, records, activeAliasAtTimestamp);
+  const candidates = buildHostFailureCandidatesFromParsedRows(parsedRows);
+  const observations = buildHostQuotaObservationsFromParsedRows(parsedRows);
+  const processedHostLogIds = new Set(
     existingEvents
       .map((event) => event.details?.hostLogId)
       .filter((value): value is number => typeof value === "number"),
@@ -302,7 +502,7 @@ export async function reconcileHostFailover(
   let appendedEvents = 0;
   let latestActiveAliasReason: FailoverReason | undefined;
   for (const candidate of candidates) {
-    if (existingHostLogIds.has(candidate.row.id)) {
+    if (processedHostLogIds.has(candidate.row.id)) {
       continue;
     }
 
@@ -318,13 +518,46 @@ export async function reconcileHostFailover(
         threadId: candidate.row.threadId,
         processUuid: candidate.row.processUuid,
         email: candidate.email,
+        quotaSnapshot: candidate.quotaSnapshot,
       },
     });
     appendedEvents += 1;
+    processedHostLogIds.add(candidate.row.id);
+    await enrichAccountIdentityHints(store, candidate.alias, {
+      email: candidate.email,
+      planType: candidate.quotaSnapshot?.planType,
+    });
 
     if (candidate.alias === state.activeAlias) {
       latestActiveAliasReason = candidate.reason;
     }
+  }
+
+  for (const observation of observations) {
+    if (processedHostLogIds.has(observation.row.id)) {
+      continue;
+    }
+
+    await store.appendEvent({
+      id: randomUUID(),
+      timestamp: new Date(observation.row.ts * 1_000).toISOString(),
+      type: "quota-observed",
+      alias: observation.alias,
+      details: {
+        source: "codex-host-log",
+        hostLogId: observation.row.id,
+        threadId: observation.row.threadId,
+        processUuid: observation.row.processUuid,
+        email: observation.email,
+        quotaSnapshot: observation.quotaSnapshot,
+      },
+    });
+    appendedEvents += 1;
+    processedHostLogIds.add(observation.row.id);
+    await enrichAccountIdentityHints(store, observation.alias, {
+      email: observation.email,
+      planType: observation.quotaSnapshot.planType,
+    });
   }
 
   if (sourceResult.latestId !== undefined) {
@@ -334,22 +567,17 @@ export async function reconcileHostFailover(
     });
   }
 
-  if (appendedEvents === 0) {
-    return {
-      available: true,
-      rowsScanned: sourceResult.rows.length,
-      appendedEvents,
-    };
-  }
-
   await refreshAllStats(store);
 
   let switchedTo: string | undefined;
-  if (state.autoSwitch && state.activeAlias && latestActiveAliasReason && shouldAutoSwitch(latestActiveAliasReason)) {
+  if (state.autoSwitch && state.activeAlias) {
     const refreshedRecords = await store.listAccounts();
-    const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords);
+    const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
+      mode: state.autoSwitchMode,
+      reason: latestActiveAliasReason,
+    });
     if (nextAlias) {
-      await switchActiveAlias(store, nextAlias, latestActiveAliasReason);
+      await switchActiveAlias(store, nextAlias, latestActiveAliasReason ?? "quota-rebalance");
       await refreshAllStats(store);
       switchedTo = nextAlias;
     }

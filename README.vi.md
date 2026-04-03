@@ -9,7 +9,8 @@ Nó bám sát trải nghiệm Codex chính thức:
 - thêm tài khoản bằng flow `codex login` chính thức
 - lưu snapshot tài khoản dưới dạng alias đơn giản
 - switch active auth cache của Codex theo kiểu atomic
-- bật auto-switch cho các lỗi host-side được hỗ trợ
+- ưu tiên hiển thị các tín hiệu quota hữu ích nhất, đặc biệt là quota còn lại của 5 giờ và 1 tuần
+- bật auto-switch theo 2 mode `balanced` và `sequential`
 - cài plugin local và MCP server để dùng trong Codex app và IDE
 
 Tài liệu tiếng Anh nằm ở [README.md](./README.md).
@@ -32,7 +33,7 @@ Sau khi cài xong, `Codex Keyring` sẽ khả dụng dưới dạng plugin trong
 
 Bạn có thể nhờ agent của Codex kiểm tra account, switch alias, rename alias, chạy `doctor`, hoặc hướng dẫn bước tiếp theo thông qua prompt ngôn ngữ tự nhiên.
 
-Khi bật auto-switch, `Codex Keyring` còn thực hiện best-effort reconciliation từ các lỗi gần đây do chính Codex host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể chuyển sang alias khác.
+Khi bật auto-switch, `Codex Keyring` còn thực hiện best-effort reconciliation từ các tín hiệu quota gần đây do chính Codex host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể chuyển sang alias khác.
 
 ## Bắt đầu nhanh cho multi-account switching
 
@@ -47,7 +48,7 @@ codex-keyring status
 
 `account1` và `account2` chỉ là alias mẫu. Hãy thay bằng tên phản ánh đúng account bạn muốn quản lý, ví dụ `alice-work`, `alice-personal`, hoặc `ngoquocviet2001`.
 
-Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra account, switch tay, hoặc chuẩn bị cho auto-switch failover.
+Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra account, switch tay, hoặc chuẩn bị cho auto-switch theo quota. View CLI mặc định giờ ưu tiên `5h left` và `week left` khi Codex đã lộ dữ liệu quota local chính xác.
 
 ## Sử dụng trong Codex App và IDE
 
@@ -116,11 +117,16 @@ codex-keyring switch account1
 ### Bật Auto-Switch Failover
 
 ```bash
-codex-keyring auto on
+codex-keyring auto on --mode balanced
 codex-keyring exec codex -- --help
 ```
 
-`auto-switch` sẽ switch active auth cache và retry đúng một tiến trình mới trong `codex-keyring exec`.
+Có 2 mode auto-switch:
+
+- `balanced` là mặc định. Mục tiêu là chia đều quota 5 giờ giữa các account. Nếu alias đang active tụt xuống các mốc thực dụng và alias khác còn nhiều headroom hơn, `codex-keyring` sẽ switch sớm.
+- `sequential` sẽ giữ alias hiện tại cho tới khi gần như bị chặn hẳn, rồi mới chuyển sang alias tốt nhất còn quota.
+
+`codex-keyring exec` giờ có thể switch active auth cache ngay khi phiên CLI đang chạy phát ra lỗi quota hoặc auth được hỗ trợ. Nếu process vẫn thoát ra, nó sẽ retry đúng một tiến trình mới sau khi failover.
 
 Với Codex app và IDE extension, `codex-keyring` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
 
@@ -147,17 +153,17 @@ Nếu xóa alias đang active, cần thêm `--force`.
 
 | Lệnh | Mục đích | Ghi chú |
 | --- | --- | --- |
-| `codex-keyring list` | liệt kê alias và health | hỗ trợ `--json` |
-| `codex-keyring status` | xem active alias và managed mode | hỗ trợ `--json` |
+| `codex-keyring list` | liệt kê alias và health | bảng mặc định ưu tiên `5h left` và `week left`; hỗ trợ `--json` |
+| `codex-keyring status` | xem active alias và managed mode | gồm auto-switch mode và quota summary; hỗ trợ `--json` |
 | `codex-keyring info <alias>` | xem chi tiết an toàn của một alias | gồm email, organization và plan details nếu có |
-| `codex-keyring stats [alias]` | xem stats cho một hoặc tất cả alias | hỗ trợ `--json` |
+| `codex-keyring stats [alias]` | xem stats ưu tiên quota cho một hoặc tất cả alias | gồm quota 5 giờ và 1 tuần khi đã biết; hỗ trợ `--json` |
 | `codex-keyring add <alias>` | thêm alias qua official login | mặc định là browser OAuth |
 | `codex-keyring add <alias> --device-auth` | thêm alias qua official device auth | có thể bị org policy chặn |
 | `codex-keyring add <alias> --from-active` | lưu auth đang active | không tạo login mới |
 | `codex-keyring switch <alias>` | kích hoạt một alias | atomic và có backup |
 | `codex-keyring remove <alias>` | xóa alias | alias đang active cần `--force` |
 | `codex-keyring rename <old> <new>` | đổi tên alias | giữ nguyên snapshot |
-| `codex-keyring auto on\|off` | bật hoặc tắt auto-switch | mặc định tắt |
+| `codex-keyring auto on\|off --mode balanced\|sequential` | bật hoặc tắt auto-switch | `balanced` là mặc định |
 | `codex-keyring exec -- <command>` | chạy command có hỗ trợ failover | retry đúng một lần sau supported switch |
 | `codex-keyring install` | cài plugin và bật managed mode | hỗ trợ `--no-manage-auth` |
 | `codex-keyring uninstall` | gỡ plugin khỏi marketplace | dữ liệu store vẫn còn |

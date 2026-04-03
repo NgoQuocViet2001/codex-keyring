@@ -69,6 +69,13 @@ function hostRows(): HostLogRow[] {
       ts: 1_775_200_001,
       threadId: "thread-1",
       processUuid: "process-1",
+      body: 'websocket event: {"type":"codex.rate_limits","plan_type":"team","rate_limits":{"allowed":true,"limit_reached":false,"primary":{"used_percent":42,"window_minutes":300,"reset_after_seconds":13893,"reset_at":1775206534},"secondary":{"used_percent":5,"window_minutes":10080,"reset_after_seconds":600693,"reset_at":1775793334}}}',
+    },
+    {
+      id: 103,
+      ts: 1_775_200_002,
+      threadId: "thread-1",
+      processUuid: "process-1",
       body: 'error {"type":"usage_limit_reached","status_code":429,"message":"You\'ve hit your usage limit."}',
     },
   ];
@@ -93,7 +100,7 @@ describe("host-reconciliation", () => {
     const result = await reconcileHostFailover(store, { rows: hostRows() });
     expect(result).toMatchObject({
       available: true,
-      appendedEvents: 1,
+      appendedEvents: 2,
       switchedTo: "account2",
     });
 
@@ -109,7 +116,7 @@ describe("host-reconciliation", () => {
           reason: "quota-exhausted",
           details: expect.objectContaining({
             source: "codex-host-log",
-            hostLogId: 102,
+            hostLogId: 103,
             email: "alice@example.com",
           }),
         }),
@@ -133,8 +140,8 @@ describe("host-reconciliation", () => {
     const first = await reconcileHostFailover(store, { rows: hostRows() });
     const second = await reconcileHostFailover(store, { rows: hostRows() });
 
-    expect(first.appendedEvents).toBe(1);
+    expect(first.appendedEvents).toBeGreaterThan(1);
     expect(second.appendedEvents).toBe(0);
-    expect(await store.listEvents("account1", 20)).toHaveLength(2);
+    expect(await store.listEvents("account1", 20)).toHaveLength(3);
   });
 });

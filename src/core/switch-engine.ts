@@ -16,8 +16,12 @@ export async function switchActiveAlias(
   alias: string,
   reason: FailoverReason | "manual" = "manual",
 ): Promise<{ backupPath?: string }> {
-  const snapshot = await store.getSnapshot(alias);
   const state = await store.getState();
+  if (state.activeAlias === alias) {
+    return {};
+  }
+
+  const snapshot = await store.getSnapshot(alias);
   const previousActiveAlias = state.activeAlias;
 
   return withFileLock(store.authLockPath(), async () => {

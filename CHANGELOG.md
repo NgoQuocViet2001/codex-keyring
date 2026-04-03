@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Add exact quota parsing from Codex host `codex.rate_limits` signals and `usage_limit_reached` headers, including 5-hour and weekly remaining percentages plus reset timestamps
+- Add `balanced` and `sequential` auto-switch modes, with `balanced` as the default strategy for spreading 5-hour quota before accounts hit the wall
+- Improve `codex-keyring exec` so live CLI sessions can switch the active auth cache as soon as a supported limit signal appears, while still retrying one fresh process after failover when needed
+- Simplify `list`, `status`, and `stats` output so the default view focuses on account health plus 5-hour and weekly quota instead of lower-signal columns
+- Remove legacy `codex-accounts` plugin cache artifacts during install and uninstall to keep local Codex plugin state clean
+
 ## 0.3.0
 
 - Rename the project from `codex-accounts` to `codex-keyring`, including the npm package, CLI command, plugin slug, guides, and legacy upgrade path for store and marketplace migration

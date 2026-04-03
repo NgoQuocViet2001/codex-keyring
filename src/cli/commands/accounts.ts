@@ -8,6 +8,7 @@ import { captureSnapshot } from "../../core/auth-snapshot.js";
 import { runDoctor } from "../../core/doctor.js";
 import { refreshAllStats, refreshStatsForAlias } from "../../core/stats-engine.js";
 import { switchActiveAlias } from "../../core/switch-engine.js";
+import type { AutoSwitchMode } from "../../core/types.js";
 import { createCodexInvocation } from "../../platform/codex-home.js";
 import type { CliContext } from "../context.js";
 
@@ -32,6 +33,19 @@ function printInfo(record: Record<string, unknown>): void {
     }
     console.log(`${key.padEnd(width)} : ${String(value)}`);
   }
+}
+
+function formatRemainingPercent(value?: number): string {
+  return Number.isFinite(value) ? `${value}%` : "--";
+}
+
+function assertAutoSwitchMode(value: string): AutoSwitchMode {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "balanced" || normalized === "sequential") {
+    return normalized;
+  }
+
+  throw new Error("Auto-switch mode must be `balanced` or `sequential`.");
 }
 
 async function runCodexLogin(tempHome: string, deviceAuth: boolean): Promise<void> {
@@ -90,11 +104,9 @@ export function registerAccountCommands(program: Command, context: CliContext): 
             row.planType = record.planType ?? "";
           }
           row.active = record.active;
-          row.authMode = record.authMode;
-          row.priority = record.priority;
           row.health = record.health;
-          row.confidence = record.confidence;
-          row.fingerprint = record.fingerprint;
+          row["5h left"] = formatRemainingPercent(record.limit5hRemainingPercent);
+          row["week left"] = formatRemainingPercent(record.limitWeekRemainingPercent);
           return row;
         }),
       );
@@ -114,8 +126,19 @@ export function registerAccountCommands(program: Command, context: CliContext): 
 
       console.log(`Active alias : ${payload.state.activeAlias ?? "(none)"}`);
       console.log(`Auto-switch  : ${payload.state.autoSwitch ? "on" : "off"}`);
+      console.log(`Auto mode    : ${payload.state.autoSwitchMode}`);
       console.log(`Managed mode : ${payload.state.managedAuthMode ? "on" : "off"}`);
-      printTable(payload.aliases as unknown as Array<Record<string, unknown>>);
+      printTable(
+        payload.aliases.map((alias) => ({
+          alias: alias.alias,
+          email: alias.email ?? "",
+          planType: alias.planType ?? "",
+          active: alias.active,
+          health: alias.health,
+          "5h left": formatRemainingPercent(alias.limit5hRemainingPercent),
+          "week left": formatRemainingPercent(alias.limitWeekRemainingPercent),
+        })) as Array<Record<string, unknown>>,
+      );
     });
 
   program
@@ -130,7 +153,19 @@ export function registerAccountCommands(program: Command, context: CliContext): 
           printJson(stats);
           return;
         }
-        printTable([stats as unknown as Record<string, unknown>]);
+        printInfo({
+          alias: stats.alias,
+          health: stats.health,
+          confidence: stats.confidence,
+          quotaObservedAt: stats.quotaObservedAt,
+          "5h left": formatRemainingPercent(stats.limit5hRemainingPercent),
+          limit5hResetAt: stats.limit5hResetAt,
+          "week left": formatRemainingPercent(stats.limitWeekRemainingPercent),
+          limitWeekResetAt: stats.limitWeekResetAt,
+          lastLimitHitAt: stats.lastLimitHitAt,
+          cooldownUntil: stats.cooldownUntil,
+          notes: stats.notes,
+        });
         return;
       }
 
@@ -139,7 +174,17 @@ export function registerAccountCommands(program: Command, context: CliContext): 
         printJson(stats);
         return;
       }
-      printTable(stats as unknown as Array<Record<string, unknown>>);
+      printTable(
+        stats.map((record) => ({
+          alias: record.alias,
+          health: record.health,
+          confidence: record.confidence,
+          "5h left": formatRemainingPercent(record.limit5hRemainingPercent),
+          "week left": formatRemainingPercent(record.limitWeekRemainingPercent),
+          cooldownUntil: record.cooldownUntil ?? "",
+          lastLimitHitAt: record.lastLimitHitAt ?? "",
+        })) as Array<Record<string, unknown>>,
+      );
     });
 
   program
@@ -160,7 +205,8 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .command("auto")
     .description("Enable or disable supported auto-switch")
     .argument("<mode>", "on or off")
-    .action(async (mode: string) => {
+    .option("--mode <autoSwitchMode>", "balanced or sequential", "balanced")
+    .action(async (mode: string, options: { mode?: string }) => {
       const normalizedMode = mode.trim().toLowerCase();
       if (normalizedMode !== "on" && normalizedMode !== "off") {
         throw new Error("Mode must be `on` or `off`.");
@@ -168,8 +214,9 @@ export function registerAccountCommands(program: Command, context: CliContext): 
 
       const state = await context.store.getState();
       state.autoSwitch = normalizedMode === "on";
+      state.autoSwitchMode = assertAutoSwitchMode(options.mode ?? state.autoSwitchMode);
       await context.store.saveState(state);
-      console.log(`Auto-switch is now ${state.autoSwitch ? "enabled" : "disabled"}.`);
+      console.log(`Auto-switch is now ${state.autoSwitch ? "enabled" : "disabled"} (${state.autoSwitchMode}).`);
     });
 
   program

@@ -30,7 +30,7 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
   const server = new Server(
     {
       name: "codex-keyring",
-      version: "0.3.0",
+      version: "0.4.0",
     },
     {
       capabilities: {
@@ -103,11 +103,15 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
       },
       {
         name: "accounts.set_auto_mode",
-        description: "Enable or disable auto-switch mode.",
+        description: "Enable or disable auto-switch mode and select the strategy.",
         inputSchema: {
           type: "object",
           properties: {
             enabled: { type: "boolean" },
+            mode: {
+              type: "string",
+              enum: ["balanced", "sequential"],
+            },
           },
           required: ["enabled"],
           additionalProperties: false,
@@ -199,6 +203,9 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
       case "accounts.set_auto_mode": {
         const state = await store.getState();
         state.autoSwitch = Boolean(args?.enabled);
+        if (args?.mode === "balanced" || args?.mode === "sequential") {
+          state.autoSwitchMode = args.mode;
+        }
         await store.saveState(state);
         return textResult(state);
       }
