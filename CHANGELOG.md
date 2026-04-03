@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Make `list`, `status`, `stats`, and `info` sync fresh Codex host quota signals before rendering, so recovered 5-hour and weekly headroom show up much closer to real time
+- Reduce `balanced` proactive 5-hour rebalancing to a single practical threshold around `20%`, while still considering weekly reserve when it gets critically low
+- Recover account health back to `ready` or `active` after a newer positive quota observation arrives, instead of leaving accounts stuck in degraded state after quota has already recovered
+- Add a read-only host-log sync path so view commands refresh stats without causing a surprise auto-switch as a side effect
+
 ## 0.5.0
 
 - Replace `codex-keyring auto on|off --mode ...` with a single `codex-keyring auto off|balanced|sequential` command

@@ -117,15 +117,17 @@ codex-keyring switch account1
 ### Bật Auto-Switch Failover
 
 ```bash
-codex-keyring auto balanced
+codex-keyring auto sequential
 codex-keyring exec codex -- --help
 ```
 
 Có 3 mode auto-switch:
 
 - `off` tắt hoàn toàn auto-switch.
-- `balanced` là mode thông minh. Nó tính cả quota còn lại của 5 giờ lẫn 1 tuần để tránh một account bị đốt quá nhanh trong khi account khác gần như không dùng. Nó vẫn ưu tiên giữ alias đang active ổn định, trừ khi đã có lỗi được hỗ trợ hoặc alias hiện tại đang tiến sát giới hạn.
+- `balanced` là mode thông minh. Nó tính cả quota còn lại của 5 giờ lẫn 1 tuần, nhưng với quota 5 giờ thì giờ chỉ rebalance khi alias đang active tụt về khoảng `20%` hoặc thấp hơn. Quota tuần vẫn được cân nhắc khi mức dự trữ xuống quá thấp.
 - `sequential` sẽ giữ alias hiện tại cho tới khi gần như bị chặn hẳn, rồi mới chuyển sang alias tốt nhất còn quota.
+
+Nếu bạn muốn hành vi ổn định và dễ đoán nhất để dùng hằng ngày, hãy bắt đầu bằng `sequential`. Đây là mode mình khuyến nghị trước trong tài liệu.
 
 `codex-keyring exec` giờ có thể switch active auth cache ngay khi phiên CLI đang chạy phát ra lỗi quota hoặc auth được hỗ trợ. Nếu process vẫn thoát ra, nó sẽ retry đúng một tiến trình mới sau khi failover.
 
@@ -174,7 +176,7 @@ Nếu xóa alias đang active, cần thêm `--force`.
 | `codex-keyring switch <alias>` | kích hoạt một alias | atomic và có backup |
 | `codex-keyring remove <alias>` | xóa alias | alias đang active cần `--force` |
 | `codex-keyring rename <old> <new>` | đổi tên alias | giữ nguyên snapshot |
-| `codex-keyring auto off\|balanced\|sequential` | đặt mode auto-switch toàn cục | `balanced` là mode thông minh |
+| `codex-keyring auto off\|balanced\|sequential` | đặt mode auto-switch toàn cục | `sequential` là mode nên bắt đầu trước |
 | `codex-keyring auto-account <alias> on\|off` | cho phép hoặc loại một alias khỏi auto-switch | `off` nghĩa là chỉ switch tay |
 | `codex-keyring exec -- <command>` | chạy command có hỗ trợ failover | retry đúng một lần sau supported switch |
 | `codex-keyring install` | cài plugin và bật managed mode | hỗ trợ `--no-manage-auth` |

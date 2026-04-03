@@ -117,15 +117,17 @@ codex-keyring switch account1
 ### Enable Auto-Switch Failover
 
 ```bash
-codex-keyring auto balanced
+codex-keyring auto sequential
 codex-keyring exec codex -- --help
 ```
 
 There are three auto-switch modes:
 
 - `off` disables automatic switching completely.
-- `balanced` is the smart mode. It scores both 5-hour and weekly remaining quota so one account does not get burned down while another stays mostly unused. It still keeps the current active alias stable unless a supported failure happens or the active alias is already close to a wall.
+- `balanced` is the smart mode. It scores both 5-hour and weekly remaining quota, but for the 5-hour window it now rebalances only when the active alias drops to roughly `20%` or lower. Weekly reserve is still considered when it gets critically low.
 - `sequential` keeps the current alias until it is effectively blocked, then moves to the best alias still known to have quota.
+
+If you want the most predictable day-to-day behavior, start with `sequential`. It is the recommended mode for most users.
 
 `codex-keyring exec` can now switch the active auth cache as soon as a live CLI session emits a supported quota or auth failure. If the process still exits, it retries one fresh process exactly once after the failover.
 
@@ -174,7 +176,7 @@ Removing the active alias requires `--force`.
 | `codex-keyring switch <alias>` | make an alias active | atomic and backup-aware |
 | `codex-keyring remove <alias>` | remove an alias | active alias requires `--force` |
 | `codex-keyring rename <old> <new>` | rename an alias | preserves snapshot |
-| `codex-keyring auto off\|balanced\|sequential` | set the global auto-switch mode | `balanced` is the smart mode |
+| `codex-keyring auto off\|balanced\|sequential` | set the global auto-switch mode | `sequential` is the recommended starting mode |
 | `codex-keyring auto-account <alias> on\|off` | include or exclude one alias from auto-switch | `off` means manual-only |
 | `codex-keyring exec -- <command>` | run a command with failover support | retries once after a supported switch |
 | `codex-keyring install` | install the plugin and enable managed mode | supports `--no-manage-auth` |

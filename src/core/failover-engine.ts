@@ -1,8 +1,10 @@
 import type { AccountRecord, AutoSwitchMode, FailoverReason } from "./types.js";
 
-const BALANCED_THRESHOLDS = [50, 20, 5];
 const BALANCED_SCORE_5H_WEIGHT = 0.7;
 const BALANCED_SCORE_WEEK_WEIGHT = 0.3;
+const BALANCED_5H_REBALANCE_THRESHOLD = 20;
+const BALANCED_WEEK_REBALANCE_THRESHOLD = 15;
+const BALANCED_WEEK_REBALANCE_MARGIN = 10;
 
 const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
   {
@@ -244,20 +246,20 @@ export function pickNextAlias(
     return undefined;
   }
 
-  for (const threshold of BALANCED_THRESHOLDS) {
-    const currentCrossedThreshold =
-      (currentCandidate.remaining5h !== undefined && currentCandidate.remaining5h <= threshold) ||
-      (currentCandidate.remainingWeek !== undefined && currentCandidate.remainingWeek <= threshold);
-    if (!currentCrossedThreshold) {
-      continue;
-    }
+  const shouldRebalanceFor5h =
+    currentCandidate.remaining5h !== undefined &&
+    currentCandidate.remaining5h <= BALANCED_5H_REBALANCE_THRESHOLD &&
+    (preferred.remaining5h ?? -1) > BALANCED_5H_REBALANCE_THRESHOLD &&
+    (preferred.remaining5h ?? -1) > currentCandidate.remaining5h;
 
-    const preferredAboveThreshold =
-      (preferred.remaining5h ?? -1) > threshold ||
-      (preferred.remainingWeek ?? -1) > threshold;
-    if (preferredAboveThreshold) {
-      return preferred.alias;
-    }
+  const shouldRebalanceForWeek =
+    currentCandidate.remainingWeek !== undefined &&
+    currentCandidate.remainingWeek <= BALANCED_WEEK_REBALANCE_THRESHOLD &&
+    preferred.remainingWeek !== undefined &&
+    preferred.remainingWeek >= currentCandidate.remainingWeek + BALANCED_WEEK_REBALANCE_MARGIN;
+
+  if (shouldRebalanceFor5h || shouldRebalanceForWeek) {
+    return preferred.alias;
   }
 
   return undefined;

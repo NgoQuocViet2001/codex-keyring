@@ -23,18 +23,63 @@ function quotaSnapshotFromEvent(event: SwitchEvent): QuotaSnapshot | undefined {
   return quotaSnapshot as QuotaSnapshot;
 }
 
-function deriveHealth(active: boolean, lastLimitHitAt?: string, cooldownUntil?: string): HealthState {
+function deriveHealth(
+  active: boolean,
+  lastLimitHitAt: string | undefined,
+  cooldownUntil: string | undefined,
+  quotaRecovered: boolean,
+): HealthState {
   const now = Date.now();
   if (cooldownUntil && Date.parse(cooldownUntil) > now) {
     return "cooldown";
   }
-  if (active) {
-    return "active";
+  if (quotaRecovered) {
+    return active ? "active" : "ready";
   }
   if (lastLimitHitAt) {
     return "degraded";
   }
+  if (active) {
+    return "active";
+  }
   return "ready";
+}
+
+function quotaRecoveredAfterLimitHit(
+  quotaSnapshot: QuotaSnapshot | undefined,
+  lastLimitHitAt: string | undefined,
+  limit5hRemainingPercent: number | undefined,
+  limitWeekRemainingPercent: number | undefined,
+): boolean {
+  const hasRemainingQuota =
+    (limit5hRemainingPercent === undefined || limit5hRemainingPercent > 0) &&
+    (limitWeekRemainingPercent === undefined || limitWeekRemainingPercent > 0);
+
+  if (!hasRemainingQuota) {
+    return false;
+  }
+
+  if (!lastLimitHitAt) {
+    return true;
+  }
+
+  if (!quotaSnapshot?.capturedAt) {
+    return false;
+  }
+
+  return Date.parse(quotaSnapshot.capturedAt) >= Date.parse(lastLimitHitAt);
+}
+
+function summarizeQuotaNote(meta: { manualWindow?: unknown }, quotaSnapshot: QuotaSnapshot | undefined, quotaRecovered: boolean): string {
+  if (meta.manualWindow) {
+    return "Quota window is manually annotated.";
+  }
+  if (quotaSnapshot) {
+    return quotaRecovered
+      ? "Quota data comes from recent Codex host rate-limit signals and reflects recovered headroom."
+      : "Quota data comes from Codex host rate-limit signals.";
+  }
+  return "Exact Codex quota data has not been observed locally yet.";
 }
 
 function confidenceFromEvents(hasExactQuota: boolean, hasEvents: boolean, hasManualWindow: boolean): ConfidenceLevel {
@@ -152,12 +197,18 @@ export async function refreshStatsForAlias(store: AccountStore, alias: string): 
   const lastLimitHitAt = limitHits.at(-1)?.timestamp;
   const lastQuotaCooldownAt = quotaCooldownEvents.at(-1)?.timestamp;
   const cooldownUntil = deriveCooldownUntil(lastQuotaCooldownAt, limit5h?.remainingPercent === 0 ? limit5h.resetAt : undefined);
+  const quotaRecovered = quotaRecoveredAfterLimitHit(
+    quotaSnapshot,
+    lastLimitHitAt,
+    limit5h?.remainingPercent,
+    limitWeek?.remainingPercent,
+  );
 
   const stats: AccountStats = {
     alias,
     authMode: normalizeAuthMode(snapshot.auth.auth_mode),
     active: state.activeAlias === alias,
-    health: deriveHealth(state.activeAlias === alias, lastLimitHitAt, cooldownUntil),
+    health: deriveHealth(state.activeAlias === alias, lastLimitHitAt, cooldownUntil, quotaRecovered),
     confidence: confidenceFromEvents(Boolean(quotaSnapshot), lifecycleEvents.length > 0, Boolean(meta.manualWindow)),
     lastSuccessAt: collectLatest(lifecycleEvents, "exec-success") ?? meta.lastUsedAt,
     lastLimitHitAt,
@@ -174,11 +225,9 @@ export async function refreshStatsForAlias(store: AccountStore, alias: string): 
     estimatedRequestsThisWindow: requestEvents.length > 0 ? requestEvents.length : undefined,
     estimatedTokensThisWindow: meta.manualWindow?.tokensPerWindow,
     windowType,
-    notes: meta.manualWindow
-      ? "Quota window is manually annotated."
-      : quotaSnapshot
-        ? "Quota data comes from Codex host rate-limit signals."
-        : "Exact Codex quota data has not been observed locally yet.",
+    notes: quotaSnapshot
+      ? summarizeQuotaNote(meta, quotaSnapshot, quotaRecovered)
+      : "Exact Codex quota data has not been observed locally yet.",
   };
 
   await store.saveStats(alias, stats);

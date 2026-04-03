@@ -116,7 +116,30 @@ describe("failover-engine", () => {
     expect(next).toBe("night");
   });
 
-  it("rebalances early in balanced mode but not in sequential mode", () => {
+  it("rebalances at the 20 percent 5h threshold in balanced mode but not in sequential mode", () => {
+    const records = [
+      record("work", {
+        active: true,
+        priority: 10,
+        limit5hRemainingPercent: 18,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 95,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("backup", {
+        priority: 20,
+        limit5hRemainingPercent: 81,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 94,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+    ];
+
+    expect(pickNextAlias("work", records, { mode: "balanced" })).toBe("backup");
+    expect(pickNextAlias("work", records, { mode: "sequential" })).toBeUndefined();
+  });
+
+  it("does not rebalance above the 20 percent 5h threshold", () => {
     const records = [
       record("work", {
         active: true,
@@ -135,8 +158,29 @@ describe("failover-engine", () => {
       }),
     ];
 
+    expect(pickNextAlias("work", records, { mode: "balanced" })).toBeUndefined();
+  });
+
+  it("still rebalances when weekly headroom is critically low", () => {
+    const records = [
+      record("work", {
+        active: true,
+        priority: 10,
+        limit5hRemainingPercent: 72,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 8,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("backup", {
+        priority: 20,
+        limit5hRemainingPercent: 55,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 42,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+    ];
+
     expect(pickNextAlias("work", records, { mode: "balanced" })).toBe("backup");
-    expect(pickNextAlias("work", records, { mode: "sequential" })).toBeUndefined();
   });
 
   it("does not rebalance when rebalancing is disabled for stable startup checks", () => {
@@ -144,7 +188,7 @@ describe("failover-engine", () => {
       record("work", {
         active: true,
         priority: 10,
-        limit5hRemainingPercent: 42,
+        limit5hRemainingPercent: 18,
         limit5hResetAt: FAR_FUTURE,
         limitWeekRemainingPercent: 95,
         limitWeekResetAt: FAR_FUTURE,

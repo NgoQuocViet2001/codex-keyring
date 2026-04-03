@@ -73,6 +73,7 @@ export interface HostReconciliationResult {
 
 interface ReconciliationOptions {
   rows?: HostLogRow[];
+  allowSwitch?: boolean;
 }
 
 function normalizeEmail(value?: string): string | undefined {
@@ -460,6 +461,7 @@ export async function reconcileHostFailover(
   store: AccountStore,
   options: ReconciliationOptions = {},
 ): Promise<HostReconciliationResult> {
+  const allowSwitch = options.allowSwitch !== false;
   const state = await store.getState();
   if (!state.managedAuthMode) {
     return {
@@ -570,7 +572,7 @@ export async function reconcileHostFailover(
   await refreshAllStats(store);
 
   let switchedTo: string | undefined;
-  if (state.autoSwitch && state.activeAlias) {
+  if (allowSwitch && state.autoSwitch && state.activeAlias) {
     const refreshedRecords = await store.listAccounts();
     const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
       mode: state.autoSwitchMode,
@@ -590,4 +592,14 @@ export async function reconcileHostFailover(
     appendedEvents,
     switchedTo,
   };
+}
+
+export async function syncHostSignalsReadOnly(
+  store: AccountStore,
+  options: Omit<ReconciliationOptions, "allowSwitch"> = {},
+): Promise<HostReconciliationResult> {
+  return reconcileHostFailover(store, {
+    ...options,
+    allowSwitch: false,
+  });
 }

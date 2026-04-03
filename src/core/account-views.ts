@@ -1,4 +1,5 @@
 import { extractAuthIdentity } from "./auth-snapshot.js";
+import { syncHostSignalsReadOnly } from "./host-reconciliation.js";
 import type { AccountStore } from "./account-store.js";
 import { refreshAllStats, refreshStatsForAlias } from "./stats-engine.js";
 import type { AuthMode, AutoSwitchMode, CodexKeyringState, ConfidenceLevel, HealthState } from "./types.js";
@@ -158,6 +159,11 @@ function toPublicAccountView(record: {
 }
 
 export async function listAccountsWithFreshStats(store: AccountStore): Promise<PublicAccountView[]> {
+  try {
+    await syncHostSignalsReadOnly(store);
+  } catch {
+    // Host-log sync is best-effort for read commands.
+  }
   await refreshAllStats(store);
   const records = await store.listAccounts();
   return records.map((record) => toPublicAccountView(record));
@@ -185,6 +191,11 @@ export async function getStatusView(store: AccountStore): Promise<StatusView> {
 }
 
 export async function getAccountInfoView(store: AccountStore, alias: string): Promise<PublicAccountView> {
+  try {
+    await syncHostSignalsReadOnly(store);
+  } catch {
+    // Host-log sync is best-effort for read commands.
+  }
   await refreshStatsForAlias(store, alias);
   const [state, meta, snapshot, stats] = await Promise.all([
     store.getState(),

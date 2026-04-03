@@ -6,6 +6,7 @@ import { normalizeAlias } from "../../core/account-store.js";
 import { getAccountInfoView, getStatusView, listAccountsWithFreshStats } from "../../core/account-views.js";
 import { captureSnapshot } from "../../core/auth-snapshot.js";
 import { runDoctor } from "../../core/doctor.js";
+import { syncHostSignalsReadOnly } from "../../core/host-reconciliation.js";
 import { refreshAllStats, refreshStatsForAlias } from "../../core/stats-engine.js";
 import { switchActiveAlias } from "../../core/switch-engine.js";
 import type { AutoSwitchMode } from "../../core/types.js";
@@ -156,6 +157,12 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("[alias]", "Specific alias to inspect")
     .option("--json", "Emit JSON output")
     .action(async (alias: string | undefined, options: { json?: boolean }) => {
+      try {
+        await syncHostSignalsReadOnly(context.store);
+      } catch {
+        // Host-log sync is best-effort for read commands.
+      }
+
       if (alias) {
         const stats = await refreshStatsForAlias(context.store, normalizeAlias(alias));
         if (options.json) {

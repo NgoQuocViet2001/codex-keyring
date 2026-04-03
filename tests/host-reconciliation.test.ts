@@ -178,6 +178,31 @@ describe("host-reconciliation", () => {
     expect(await store.listEvents("account1", 20)).toHaveLength(3);
   });
 
+  it("can sync host rows without switching the active alias", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
+
+    const store = new AccountStore(env);
+    await store.upsertAccount("account1", snapshot("acct-1", "alice@example.com"));
+    await store.upsertAccount("account2", snapshot("acct-2", "bob@example.com"));
+
+    const state = await store.getState();
+    state.activeAlias = "account1";
+    state.autoSwitch = true;
+    state.autoSwitchMode = "balanced";
+    state.managedAuthMode = true;
+    await store.saveState(state);
+
+    const result = await reconcileHostFailover(store, {
+      rows: hostRows(),
+      allowSwitch: false,
+    });
+    expect(result.appendedEvents).toBeGreaterThan(0);
+    expect(result.switchedTo).toBeUndefined();
+    expect((await store.getState()).activeAlias).toBe("account1");
+  });
+
   it("does not proactively rebalance on passive quota observations alone", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
