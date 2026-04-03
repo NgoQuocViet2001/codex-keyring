@@ -29,7 +29,8 @@ function createEnv(root: string): CodexEnvironment {
     codexPluginsDir: path.join(codexHome, "plugins"),
     personalMarketplacePath: path.join(userHome, ".agents", "plugins", "marketplace.json"),
     personalMarketplaceRoot: userHome,
-    codexAccountsHome: path.join(userHome, ".codex-accounts"),
+    codexKeyringHome: path.join(userHome, ".codex-keyring"),
+    legacyCodexAccountsHome: path.join(userHome, ".codex-accounts"),
   };
 }
 
@@ -75,7 +76,7 @@ function hostRows(): HostLogRow[] {
 
 describe("host-reconciliation", () => {
   it("records host-side limit hits and auto-switches the next active alias", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -117,7 +118,7 @@ describe("host-reconciliation", () => {
   });
 
   it("deduplicates already-processed host rows", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 

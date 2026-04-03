@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
-import { getCodexEnvironment, type CodexEnvironment, pathExists } from "../platform/codex-home.js";
+import { getCodexEnvironment, migrateLegacyKeyringHome, type CodexEnvironment, pathExists } from "../platform/codex-home.js";
 import type {
   AccountMeta,
   AccountRecord,
   AccountSnapshot,
   AccountStats,
-  CodexAccountsState,
+  CodexKeyringState,
   HostLogState,
   SwitchEvent,
 } from "./types.js";
@@ -29,7 +29,7 @@ function normalizeStatsRecord(alias: string, stats: AccountStats): AccountStats 
   };
 }
 
-function defaultState(): CodexAccountsState {
+function defaultState(): CodexKeyringState {
   const timestamp = now();
   return {
     schemaVersion: 1,
@@ -106,7 +106,7 @@ export class AccountStore {
 
   constructor(env = getCodexEnvironment()) {
     this.env = env;
-    this.root = env.codexAccountsHome;
+    this.root = env.codexKeyringHome;
     this.accountsDir = path.join(this.root, "accounts");
     this.statsDir = path.join(this.root, "stats");
     this.backupsDir = path.join(this.root, "backups");
@@ -115,6 +115,7 @@ export class AccountStore {
   }
 
   async ensureStore(): Promise<void> {
+    await migrateLegacyKeyringHome(this.env);
     await mkdir(this.accountsDir, { recursive: true });
     await mkdir(this.statsDir, { recursive: true });
     await mkdir(this.backupsDir, { recursive: true });
@@ -170,12 +171,12 @@ export class AccountStore {
     return path.join(this.statsDir, `${normalizeAlias(alias)}.json`);
   }
 
-  async getState(): Promise<CodexAccountsState> {
+  async getState(): Promise<CodexKeyringState> {
     await this.ensureStore();
-    return readJsonFile<CodexAccountsState>(this.statePath());
+    return readJsonFile<CodexKeyringState>(this.statePath());
   }
 
-  async saveState(nextState: CodexAccountsState): Promise<void> {
+  async saveState(nextState: CodexKeyringState): Promise<void> {
     nextState.updatedAt = now();
     await writeJsonFile(this.statePath(), nextState);
   }

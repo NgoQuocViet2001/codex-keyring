@@ -10,7 +10,7 @@ import { createCliContext } from "./context.js";
 async function main(): Promise<void> {
   const context = await createCliContext();
   const program = new Command();
-  program.name("codex-accounts").description("Native multi-account manager for Codex").version(packageJson.version);
+  program.name("codex-keyring").description("Native multi-account manager for Codex").version(packageJson.version);
 
   registerAccountCommands(program, context);
   registerInstallCommands(program, context);
@@ -28,6 +28,6 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`codex-accounts: ${message}`);
+  console.error(`codex-keyring: ${message}`);
   process.exitCode = 1;
 });

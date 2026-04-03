@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 160" role="img" aria-label="Codex Accounts logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 160" role="img" aria-label="Codex Keyring logo">
   <rect width="512" height="160" rx="28" fill="#071E26"/>
   <rect x="18" y="18" width="124" height="124" rx="28" fill="#0A6E6E"/>
   <circle cx="60" cy="64" r="18" fill="#D8FFF8"/>
   <circle cx="100" cy="64" r="18" fill="#8AE1D5"/>
   <path d="M34 110c6-16 16-24 30-24s24 8 30 24" fill="none" stroke="#D8FFF8" stroke-width="10" stroke-linecap="round"/>
   <path d="M72 110c5-11 14-17 27-17 14 0 23 6 28 17" fill="none" stroke="#8AE1D5" stroke-width="10" stroke-linecap="round"/>
-  <text x="170" y="73" fill="#F2F7F7" font-size="38" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Codex Accounts</text>
+  <text x="170" y="73" fill="#F2F7F7" font-size="38" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Codex Keyring</text>
   <text x="170" y="110" fill="#95B9B8" font-size="18" font-family="Segoe UI, Arial, sans-serif">Native multi-account manager for Codex</text>
 </svg>

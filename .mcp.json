@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "codex-accounts": {
+    "codex-keyring": {
       "type": "stdio",
-      "command": "codex-accounts",
+      "command": "codex-keyring",
       "args": [
         "mcp"
       ],
-      "note": "Local stdio MCP server for codex-accounts. Exposes alias management and status tools to Codex app, CLI, and IDE extension."
+      "note": "Local stdio MCP server for codex-keyring. Exposes multi-account alias management, manual switching, auto-switch health checks, and status tools to Codex app, CLI, and IDE extension."
     }
   }
 }

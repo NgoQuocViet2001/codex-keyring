@@ -23,7 +23,19 @@ interface MarketplaceFile {
   plugins: MarketplacePluginEntry[];
 }
 
-const PLUGIN_NAME = "codex-accounts";
+const PLUGIN_NAME = "codex-keyring";
+const LEGACY_PLUGIN_NAME = "codex-accounts";
+const PLUGIN_PATH = "./.codex/plugins/codex-keyring";
+const LEGACY_PLUGIN_PATH = "./.codex/plugins/codex-accounts";
+
+function isManagedPlugin(plugin: MarketplacePluginEntry): boolean {
+  return (
+    plugin.name === PLUGIN_NAME ||
+    plugin.name === LEGACY_PLUGIN_NAME ||
+    plugin.source.path === PLUGIN_PATH ||
+    plugin.source.path === LEGACY_PLUGIN_PATH
+  );
+}
 
 function defaultMarketplace(): MarketplaceFile {
   return {
@@ -55,7 +67,7 @@ export async function ensurePersonalMarketplaceEntry(env: CodexEnvironment): Pro
     name: PLUGIN_NAME,
     source: {
       source: "local",
-      path: "./.codex/plugins/codex-accounts",
+      path: PLUGIN_PATH,
     },
     policy: {
       installation: "AVAILABLE",
@@ -64,7 +76,7 @@ export async function ensurePersonalMarketplaceEntry(env: CodexEnvironment): Pro
     category: "Productivity",
   };
 
-  const nextPlugins = marketplace.plugins.filter((plugin) => plugin.name !== PLUGIN_NAME);
+  const nextPlugins = marketplace.plugins.filter((plugin) => !isManagedPlugin(plugin));
   nextPlugins.push(entry);
   marketplace.plugins = nextPlugins;
   await writeMarketplace(env, marketplace);
@@ -72,11 +84,11 @@ export async function ensurePersonalMarketplaceEntry(env: CodexEnvironment): Pro
 
 export async function removePersonalMarketplaceEntry(env: CodexEnvironment): Promise<void> {
   const marketplace = await readMarketplace(env);
-  marketplace.plugins = marketplace.plugins.filter((plugin) => plugin.name !== PLUGIN_NAME);
+  marketplace.plugins = marketplace.plugins.filter((plugin) => !isManagedPlugin(plugin));
   await writeMarketplace(env, marketplace);
 }
 
 export async function hasMarketplaceEntry(env: CodexEnvironment): Promise<boolean> {
   const marketplace = await readMarketplace(env);
-  return marketplace.plugins.some((plugin) => plugin.name === PLUGIN_NAME);
+  return marketplace.plugins.some((plugin) => isManagedPlugin(plugin));
 }

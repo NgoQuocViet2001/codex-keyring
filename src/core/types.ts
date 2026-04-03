@@ -53,7 +53,7 @@ export interface AccountMeta {
   manualWindow?: ManualWindowConfig;
 }
 
-export interface CodexAccountsState {
+export interface CodexKeyringState {
   schemaVersion: 1;
   createdAt: string;
   updatedAt: string;

@@ -5,7 +5,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AccountStore } from "../src/core/account-store.js";
 import { refreshStatsForAlias } from "../src/core/stats-engine.js";
-import type { AccountSnapshot, CodexEnvironment } from "../src/core/types.js";
+import type { AccountSnapshot } from "../src/core/types.js";
+import type { CodexEnvironment } from "../src/platform/codex-home.js";
 
 let tempDir: string | undefined;
 
@@ -29,7 +30,8 @@ function createEnv(root: string): CodexEnvironment {
     codexPluginsDir: path.join(codexHome, "plugins"),
     personalMarketplacePath: path.join(userHome, ".agents", "plugins", "marketplace.json"),
     personalMarketplaceRoot: userHome,
-    codexAccountsHome: path.join(userHome, ".codex-accounts"),
+    codexKeyringHome: path.join(userHome, ".codex-keyring"),
+    legacyCodexAccountsHome: path.join(userHome, ".codex-accounts"),
   };
 }
 
@@ -49,7 +51,7 @@ function snapshot(accountId: string): AccountSnapshot {
 
 describe("account-store rename and stats lifecycle", () => {
   it("renames stats and event history with the alias", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -105,7 +107,7 @@ describe("account-store rename and stats lifecycle", () => {
   });
 
   it("resets derived stats when an alias is re-registered for a different account", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -130,7 +132,7 @@ describe("account-store rename and stats lifecycle", () => {
   });
 
   it("keeps old event history visible after rename for stores created before the fix", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -162,5 +164,22 @@ describe("account-store rename and stats lifecycle", () => {
     const refreshed = await refreshStatsForAlias(store, "hinadau04");
     expect(refreshed.lastSuccessAt).toBeDefined();
     expect(refreshed.alias).toBe("hinadau04");
+  });
+
+  it("migrates a legacy ~/.codex-accounts store into ~/.codex-keyring", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    const legacyRoot = env.legacyCodexAccountsHome;
+    await mkdir(path.join(legacyRoot, "accounts"), { recursive: true });
+    await writeFile(path.join(legacyRoot, "state.json"), JSON.stringify({ schemaVersion: 1 }), "utf8");
+    await writeFile(path.join(legacyRoot, "events.jsonl"), "", "utf8");
+
+    const store = new AccountStore(env);
+    await store.ensureStore();
+
+    expect(JSON.parse(await readFile(path.join(env.codexKeyringHome, "state.json"), "utf8"))).toMatchObject({
+      schemaVersion: 1,
+    });
+    await expect(readFile(path.join(env.legacyCodexAccountsHome, "state.json"), "utf8")).rejects.toThrow();
   });
 });

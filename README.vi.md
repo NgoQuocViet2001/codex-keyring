@@ -1,12 +1,15 @@
-# codex-accounts
+# codex-keyring
 
-`codex-accounts` là trình quản lý nhiều tài khoản theo kiểu native dành cho Codex app, Codex CLI và Codex IDE extension.
+`codex-keyring` là trình quản lý nhiều tài khoản theo kiểu native dành cho Codex app, Codex CLI và Codex IDE extension.
+
+Nó dành cho những ai muốn giữ nhiều login Codex dưới dạng alias gọn gàng, switch tay bằng một lệnh, hoặc để hệ thống auto-switch sau các lỗi quota, rate-limit, auth-expiry, và workspace-mismatch được hỗ trợ.
 
 Nó bám sát trải nghiệm Codex chính thức:
 
 - thêm tài khoản bằng flow `codex login` chính thức
 - lưu snapshot tài khoản dưới dạng alias đơn giản
 - switch active auth cache của Codex theo kiểu atomic
+- bật auto-switch cho các lỗi host-side được hỗ trợ
 - cài plugin local và MCP server để dùng trong Codex app và IDE
 
 Tài liệu tiếng Anh nằm ở [README.md](./README.md).
@@ -14,42 +17,44 @@ Tài liệu tiếng Anh nằm ở [README.md](./README.md).
 ## Cài đặt
 
 ```bash
-npm install -g codex-accounts
-codex-accounts install
-codex-accounts doctor
+npm install -g codex-keyring
+codex-keyring install
+codex-keyring doctor
 ```
 
-`codex-accounts install` thiết lập managed mode, cài plugin payload local cho Codex, và cập nhật personal plugin marketplace.
+`codex-keyring install` thiết lập managed mode, cài plugin payload local cho Codex, và cập nhật personal plugin marketplace.
+
+Nếu bạn đang nâng cấp từ `codex-accounts`, chỉ cần cài `codex-keyring` rồi chạy `codex-keyring install` một lần. Dữ liệu cũ trong `~/.codex-accounts` sẽ được migrate sang `~/.codex-keyring`, đồng thời personal marketplace entry cũng được chuẩn hóa sang plugin slug mới.
 
 ### Sau khi `install`
 
-Sau khi cài xong, `Codex Accounts` sẽ khả dụng dưới dạng plugin trong Codex app và Codex IDE extension.
+Sau khi cài xong, `Codex Keyring` sẽ khả dụng dưới dạng plugin trong Codex app và Codex IDE extension.
 
 Bạn có thể nhờ agent của Codex kiểm tra account, switch alias, rename alias, chạy `doctor`, hoặc hướng dẫn bước tiếp theo thông qua prompt ngôn ngữ tự nhiên.
 
-Khi bật auto-switch, `Codex Accounts` còn thực hiện best-effort reconciliation từ các lỗi gần đây do chính Codex host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể chuyển sang alias khác.
+Khi bật auto-switch, `Codex Keyring` còn thực hiện best-effort reconciliation từ các lỗi gần đây do chính Codex host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể chuyển sang alias khác.
 
-## Bắt đầu nhanh
+## Bắt đầu nhanh cho multi-account switching
 
 ```bash
-codex-accounts add account1 --from-active
-codex-accounts add account2
+codex-keyring add account1 --from-active
+codex-keyring add account2
 
-codex-accounts list
-codex-accounts switch account2
-codex-accounts status
+codex-keyring list
+codex-keyring switch account2
+codex-keyring status
 ```
 
 `account1` và `account2` chỉ là alias mẫu. Hãy thay bằng tên phản ánh đúng account bạn muốn quản lý, ví dụ `alice-work`, `alice-personal`, hoặc `ngoquocviet2001`.
 
-Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra và switch qua lại.
+Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra account, switch tay, hoặc chuẩn bị cho auto-switch failover.
 
 ## Sử dụng trong Codex App và IDE
 
-Sau khi chạy `codex-accounts install`:
+Sau khi chạy `codex-keyring install`:
 
 1. restart Codex app hoặc reload IDE extension session
-2. xác nhận `Codex Accounts` xuất hiện trong Plugins panel
+2. xác nhận `Codex Keyring` xuất hiện trong Plugins panel
 3. dùng prompt ngôn ngữ tự nhiên để gọi các tool quản lý account
 
 Ví dụ prompt:
@@ -58,7 +63,7 @@ Ví dụ prompt:
 - `Switch the active Codex account to account2 for subsequent requests.`
 - `Show the details for account2, including email, organization, and plan details when available.`
 - `Rename the alias account2 to alice-work.`
-- `Run a doctor check for codex-accounts and summarize the result.`
+- `Run a doctor check for codex-keyring and summarize the result.`
 
 Mỗi lần switch sẽ cập nhật auth cache nền của Codex. Các tiến trình CLI mới sẽ dùng account mới ngay. Với Codex app và IDE, account đã switch thường được áp dụng ở request kế tiếp hoặc sau khi reload session hiện tại.
 
@@ -67,13 +72,13 @@ Mỗi lần switch sẽ cập nhật auth cache nền của Codex. Các tiến t
 ### Thêm Login Hiện Tại
 
 ```bash
-codex-accounts add account1 --from-active
+codex-keyring add account1 --from-active
 ```
 
 ### Thêm Một Account Khác
 
 ```bash
-codex-accounts add account2
+codex-keyring add account2
 ```
 
 Lệnh này dùng flow `codex login` mặc định qua browser.
@@ -81,56 +86,56 @@ Lệnh này dùng flow `codex login` mặc định qua browser.
 Nếu cần device auth:
 
 ```bash
-codex-accounts add account2 --device-auth
+codex-keyring add account2 --device-auth
 ```
 
 Nếu môi trường của bạn chặn device auth, hãy login trước rồi capture active auth:
 
 ```bash
 codex login
-codex-accounts add account2 --from-active
+codex-keyring add account2 --from-active
 ```
 
 ### Liệt kê và Kiểm tra Account
 
 ```bash
-codex-accounts list
-codex-accounts info account2
-codex-accounts status
-codex-accounts stats
-codex-accounts stats account2
+codex-keyring list
+codex-keyring info account2
+codex-keyring status
+codex-keyring stats
+codex-keyring stats account2
 ```
 
-### Switch Account
+### Switch Account Thủ Công
 
 ```bash
-codex-accounts switch account2
-codex-accounts switch account1
+codex-keyring switch account2
+codex-keyring switch account1
 ```
 
-### Bật Auto-Switch
+### Bật Auto-Switch Failover
 
 ```bash
-codex-accounts auto on
-codex-accounts exec codex -- --help
+codex-keyring auto on
+codex-keyring exec codex -- --help
 ```
 
-`auto-switch` sẽ switch active auth cache và retry đúng một tiến trình mới trong `codex-accounts exec`.
+`auto-switch` sẽ switch active auth cache và retry đúng một tiến trình mới trong `codex-keyring exec`.
 
-Với Codex app và IDE extension, `codex-accounts` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
+Với Codex app và IDE extension, `codex-keyring` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
 
 ### Đổi Tên hoặc Xóa Alias
 
 ```bash
-codex-accounts rename account2 alice-work
-codex-accounts remove alice-work
+codex-keyring rename account2 alice-work
+codex-keyring remove alice-work
 ```
 
 Nếu xóa alias đang active, cần thêm `--force`.
 
 ## Hệ điều hành hỗ trợ
 
-`codex-accounts` nhắm tới cùng tập hệ điều hành mà Codex CLI chính thức hỗ trợ:
+`codex-keyring` nhắm tới cùng tập hệ điều hành mà Codex CLI chính thức hỗ trợ:
 
 - Windows
 - macOS
@@ -142,30 +147,30 @@ Nếu xóa alias đang active, cần thêm `--force`.
 
 | Lệnh | Mục đích | Ghi chú |
 | --- | --- | --- |
-| `codex-accounts list` | liệt kê alias và health | hỗ trợ `--json` |
-| `codex-accounts status` | xem active alias và managed mode | hỗ trợ `--json` |
-| `codex-accounts info <alias>` | xem chi tiết an toàn của một alias | gồm email, organization và plan details nếu có |
-| `codex-accounts stats [alias]` | xem stats cho một hoặc tất cả alias | hỗ trợ `--json` |
-| `codex-accounts add <alias>` | thêm alias qua official login | mặc định là browser OAuth |
-| `codex-accounts add <alias> --device-auth` | thêm alias qua official device auth | có thể bị org policy chặn |
-| `codex-accounts add <alias> --from-active` | lưu auth đang active | không tạo login mới |
-| `codex-accounts switch <alias>` | kích hoạt một alias | atomic và có backup |
-| `codex-accounts remove <alias>` | xóa alias | alias đang active cần `--force` |
-| `codex-accounts rename <old> <new>` | đổi tên alias | giữ nguyên snapshot |
-| `codex-accounts auto on\|off` | bật hoặc tắt auto-switch | mặc định tắt |
-| `codex-accounts exec -- <command>` | chạy command có hỗ trợ failover | retry đúng một lần sau supported switch |
-| `codex-accounts install` | cài plugin và bật managed mode | hỗ trợ `--no-manage-auth` |
-| `codex-accounts uninstall` | gỡ plugin khỏi marketplace | dữ liệu store vẫn còn |
-| `codex-accounts doctor` | kiểm tra tình trạng môi trường | nên chạy sau khi install |
-| `codex-accounts mcp` | chạy stdio MCP server | dùng cho tích hợp nâng cao |
+| `codex-keyring list` | liệt kê alias và health | hỗ trợ `--json` |
+| `codex-keyring status` | xem active alias và managed mode | hỗ trợ `--json` |
+| `codex-keyring info <alias>` | xem chi tiết an toàn của một alias | gồm email, organization và plan details nếu có |
+| `codex-keyring stats [alias]` | xem stats cho một hoặc tất cả alias | hỗ trợ `--json` |
+| `codex-keyring add <alias>` | thêm alias qua official login | mặc định là browser OAuth |
+| `codex-keyring add <alias> --device-auth` | thêm alias qua official device auth | có thể bị org policy chặn |
+| `codex-keyring add <alias> --from-active` | lưu auth đang active | không tạo login mới |
+| `codex-keyring switch <alias>` | kích hoạt một alias | atomic và có backup |
+| `codex-keyring remove <alias>` | xóa alias | alias đang active cần `--force` |
+| `codex-keyring rename <old> <new>` | đổi tên alias | giữ nguyên snapshot |
+| `codex-keyring auto on\|off` | bật hoặc tắt auto-switch | mặc định tắt |
+| `codex-keyring exec -- <command>` | chạy command có hỗ trợ failover | retry đúng một lần sau supported switch |
+| `codex-keyring install` | cài plugin và bật managed mode | hỗ trợ `--no-manage-auth` |
+| `codex-keyring uninstall` | gỡ plugin khỏi marketplace | dữ liệu store vẫn còn |
+| `codex-keyring doctor` | kiểm tra tình trạng môi trường | nên chạy sau khi install |
+| `codex-keyring mcp` | chạy stdio MCP server | dùng cho tích hợp nâng cao |
 
 ## Khắc phục sự cố
 
 ### `doctor` báo `cli-auth-store` là `warn`
 
 ```bash
-codex-accounts install
-codex-accounts doctor
+codex-keyring install
+codex-keyring doctor
 ```
 
 ### Browser Login chạy được nhưng Device Auth lỗi
@@ -173,23 +178,23 @@ codex-accounts doctor
 Một số tổ chức chặn device auth. Hãy dùng:
 
 ```bash
-codex-accounts add account2
+codex-keyring add account2
 ```
 
 hoặc:
 
 ```bash
 codex login
-codex-accounts add account2 --from-active
+codex-keyring add account2 --from-active
 ```
 
 ### Plugin không xuất hiện
 
-Hãy chạy `codex-accounts doctor`, xác nhận marketplace check đã pass, rồi restart Codex app hoặc reload IDE extension session.
+Hãy chạy `codex-keyring doctor`, xác nhận marketplace check đã pass, rồi restart Codex app hoặc reload IDE extension session.
 
 ### `info` không hiện tên business workspace
 
-`codex-accounts` chỉ hiển thị các trường identity mà official local auth cache của Codex thực sự cung cấp. Với một số account business-managed, tên workspace đang chọn trong giao diện Codex không có trong auth snapshot local, nên `info` có thể chỉ hiện email và plan details.
+`codex-keyring` chỉ hiển thị các trường identity mà official local auth cache của Codex thực sự cung cấp. Với một số account business-managed, tên workspace đang chọn trong giao diện Codex không có trong auth snapshot local, nên `info` có thể chỉ hiện email và plan details.
 
 ### `exec` không switch account
 

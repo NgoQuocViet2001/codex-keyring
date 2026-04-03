@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Keyring"
+  short_description: "Manage multi-account Codex aliases with manual switch and auto-switch failover"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/logo.svg"
+  default_prompt: "Use Codex Keyring to list registered aliases, show which account is active, and help me switch or diagnose managed auth."

@@ -30,6 +30,6 @@ export function registerInstallCommands(program: Command, context: CliContext): 
     .description("Remove the plugin from the personal Codex marketplace")
     .action(async () => {
       await uninstallPlugin(context.store);
-      console.log("Removed codex-accounts from the personal Codex marketplace.");
+      console.log("Removed codex-keyring from the personal Codex marketplace.");
     });
 }

@@ -4,7 +4,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AccountStore } from "../src/core/account-store.js";
 import { getAccountInfoView, getStatusView, listAccountsWithFreshStats } from "../src/core/account-views.js";
-import type { AccountSnapshot, CodexEnvironment } from "../src/core/types.js";
+import type { AccountSnapshot } from "../src/core/types.js";
+import type { CodexEnvironment } from "../src/platform/codex-home.js";
 
 let tempDir: string | undefined;
 
@@ -28,7 +29,8 @@ function createEnv(root: string): CodexEnvironment {
     codexPluginsDir: path.join(codexHome, "plugins"),
     personalMarketplacePath: path.join(userHome, ".agents", "plugins", "marketplace.json"),
     personalMarketplaceRoot: userHome,
-    codexAccountsHome: path.join(userHome, ".codex-accounts"),
+    codexKeyringHome: path.join(userHome, ".codex-keyring"),
+    legacyCodexAccountsHome: path.join(userHome, ".codex-accounts"),
   };
 }
 
@@ -87,7 +89,7 @@ function snapshotWithTeamClaims(): AccountSnapshot {
 
 describe("account-views", () => {
   it("returns sanitized account list data", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -107,7 +109,7 @@ describe("account-views", () => {
   });
 
   it("returns sanitized status data", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -127,7 +129,7 @@ describe("account-views", () => {
   });
 
   it("returns safe account info for one alias", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 
@@ -147,7 +149,7 @@ describe("account-views", () => {
   });
 
   it("hides ambiguous Personal organization labels for team plans", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-accounts-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
 

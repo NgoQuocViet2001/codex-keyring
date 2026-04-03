@@ -49,8 +49,8 @@ export async function runDoctor(store: AccountStore): Promise<DoctorResult> {
 
   checks.push(
     marketplaceEntry
-      ? check("pass", "marketplace", "Personal marketplace contains codex-accounts.")
-      : check("warn", "marketplace", "Personal marketplace does not contain codex-accounts."),
+      ? check("pass", "marketplace", "Personal marketplace contains codex-keyring.")
+      : check("warn", "marketplace", "Personal marketplace does not contain codex-keyring."),
   );
 
   checks.push(
@@ -71,7 +71,7 @@ export async function runDoctor(store: AccountStore): Promise<DoctorResult> {
         "warn",
         "auto-switch-managed-mode",
         "Auto-switch is enabled but Codex may still be using keyring or auto storage.",
-        "Run `codex-accounts install` or update ~/.codex/config.toml to file-backed auth mode.",
+        "Run `codex-keyring install` or update ~/.codex/config.toml to file-backed auth mode.",
       ),
     );
   }

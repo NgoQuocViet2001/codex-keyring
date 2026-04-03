@@ -1,14 +1,14 @@
 {
-  "name": "codex-accounts",
+  "name": "codex-keyring",
   "version": "0.3.0",
-  "description": "Native multi-account manager and plugin installer for Codex app, CLI, and IDE extension.",
+  "description": "Native multi-account manager for Codex with manual alias switching, auto-switch failover, and plugin install support.",
   "type": "module",
   "packageManager": "npm@11.11.0",
   "engines": {
     "node": ">=20.0.0"
   },
   "bin": {
-    "codex-accounts": "dist/src/cli/index.js"
+    "codex-keyring": "dist/src/cli/index.js"
   },
   "files": [
     "dist",
@@ -40,15 +40,20 @@
     "openai",
     "plugin",
     "extension",
+    "multi-account",
+    "account-switching",
+    "manual-switch",
+    "auto-switch",
+    "failover",
     "accounts",
     "auth"
   ],
   "author": "NgoQuocViet2001 <ngoquocviet2001@gmail.com>",
   "license": "MIT",
-  "homepage": "https://github.com/ngoquocviet2001/codex-accounts",
+  "homepage": "https://github.com/ngoquocviet2001/codex-keyring",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ngoquocviet2001/codex-accounts.git"
+    "url": "git+https://github.com/ngoquocviet2001/codex-keyring.git"
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",

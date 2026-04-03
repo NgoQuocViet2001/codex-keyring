@@ -17,5 +17,5 @@ if (tgzFiles.length > 0) {
   console.log("");
   console.log("Suggested next steps:");
   console.log(`npm install -g ./${latest}`);
-  console.log("codex-accounts install");
+  console.log("codex-keyring install");
 }

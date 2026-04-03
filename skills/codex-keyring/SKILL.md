@@ -1,11 +1,11 @@
 ---
-name: codex-accounts
-description: Manage multiple Codex logins with aliases, safe switching, installer automation, and account health checks through the local codex-accounts MCP tools.
+name: codex-keyring
+description: Manage multiple Codex logins with aliases, manual switching, auto-switch failover, installer automation, and account health checks through the local codex-keyring MCP tools.
 ---
 
-# Codex Accounts
+# Codex Keyring
 
-Use this skill when the user wants to list, add, switch, remove, rename, or inspect Codex accounts managed by the `codex-accounts` extension.
+Use this skill when the user wants to list, add, switch, remove, rename, or inspect Codex accounts managed by the `codex-keyring` extension.
 
 ## Core Rules
 

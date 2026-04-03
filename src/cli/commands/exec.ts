@@ -92,7 +92,7 @@ export function registerExecCommand(program: Command, context: CliContext): void
 
       await switchActiveAlias(context.store, nextAlias, failureReason);
       await refreshStatsForAlias(context.store, nextAlias);
-      console.error(`codex-accounts: switched to ${nextAlias} after ${failureReason}; retrying once.`);
+      console.error(`codex-keyring: switched to ${nextAlias} after ${failureReason}; retrying once.`);
 
       const secondRun = await runCommandWithCapture(command, args ?? []);
       await context.store.appendEvent({

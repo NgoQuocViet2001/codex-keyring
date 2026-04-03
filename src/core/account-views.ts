@@ -1,7 +1,7 @@
 import { extractAuthIdentity } from "./auth-snapshot.js";
 import type { AccountStore } from "./account-store.js";
 import { refreshAllStats, refreshStatsForAlias } from "./stats-engine.js";
-import type { AuthMode, CodexAccountsState, ConfidenceLevel, HealthState } from "./types.js";
+import type { AuthMode, CodexKeyringState, ConfidenceLevel, HealthState } from "./types.js";
 
 export interface PublicAccountView {
   alias: string;
@@ -41,7 +41,7 @@ export interface StatusAliasView {
 }
 
 export interface StatusView {
-  state: CodexAccountsState;
+  state: CodexKeyringState;
   aliases: StatusAliasView[];
 }
 

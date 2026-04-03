@@ -7,4 +7,4 @@ const env = getCodexEnvironment();
 const store = new AccountStore(env);
 await store.ensureStore();
 await uninstallPlugin(store);
-console.log("codex-accounts removed from personal marketplace.");
+console.log("codex-keyring removed from personal marketplace.");

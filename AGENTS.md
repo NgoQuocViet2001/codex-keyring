@@ -2,7 +2,7 @@
 
 ## Mission
 
-Build `codex-accounts` as a native multi-account manager for Codex app, Codex CLI, and the Codex IDE extension.
+Build `codex-keyring` as a native multi-account manager for Codex app, Codex CLI, and the Codex IDE extension.
 
 This project is explicitly **not** a proxy, router, or custom OpenAI-compatible endpoint. It must stay close to Codex-native auth, Codex-native plugin installation, and Codex-native account switching.
 
@@ -28,7 +28,7 @@ The long-lived source of truth for this repository is:
 - Never print or log raw `access_token`, `refresh_token`, `id_token`, or `OPENAI_API_KEY`.
 - Never commit auth snapshots, local stores, or user-specific credential paths.
 - Redact secrets in errors, diagnostics, and tests.
-- Treat `~/.codex/auth.json` and `~/.codex-accounts/accounts/*/auth.json` like passwords.
+- Treat `~/.codex/auth.json` and `~/.codex-keyring/accounts/*/auth.json` like passwords.
 - Any debug output must use fingerprints or presence flags, never raw values.
 
 ## Auth And Switching Rules
@@ -38,7 +38,7 @@ The long-lived source of truth for this repository is:
 - Keep a recovery backup before changing the active auth file.
 - `auto-switch` may only trigger for classified quota, auth-expired, workspace-mismatch, or rate-limited failures.
 - Generic network errors must not rotate accounts by default.
-- `codex-accounts exec` may retry exactly once after a successful failover.
+- `codex-keyring exec` may retry exactly once after a successful failover.
 - The app and IDE extension may use the switched account only for the next request. Do not promise in-flight seamless continuation.
 
 ## Managed Mode Rules
@@ -56,7 +56,7 @@ The long-lived source of truth for this repository is:
 
 ## Platform Rules
 
-- `codex-accounts` should target the same operating-system surface as the official Codex CLI: Windows, macOS, Linux, WSL, and containerized environments where Codex is supported.
+- `codex-keyring` should target the same operating-system surface as the official Codex CLI: Windows, macOS, Linux, WSL, and containerized environments where Codex is supported.
 - Windows remains a first-class target and must stay explicitly tested.
 - Path and process handling must use Node `path`, `os`, and `fs` utilities plus shell-aware invocation helpers instead of OS-specific scripts.
 - New auth, install, or smoke-test flows must not assume PowerShell, `%USERPROFILE%`, or other Windows-only conventions unless they also provide a POSIX-safe path.
@@ -103,7 +103,7 @@ Minimum checks before considering a milestone complete:
 - `npm test`
 - local `npm pack`
 - global install from `.tgz`
-- `codex-accounts install`
-- `codex-accounts doctor`
+- `codex-keyring install`
+- `codex-keyring doctor`
 
 Auth, switching, marketplace installation, and release-guard logic should not ship without tests.

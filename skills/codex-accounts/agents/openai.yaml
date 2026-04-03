@@ -1,6 +1,0 @@
-interface:
-  display_name: "Codex Accounts"
-  short_description: "Manage Codex aliases and switch the active account safely"
-  icon_small: "./assets/icon.svg"
-  icon_large: "./assets/logo.svg"
-  default_prompt: "Use Codex Accounts to list registered aliases, show which account is active, and help me switch or diagnose managed auth."

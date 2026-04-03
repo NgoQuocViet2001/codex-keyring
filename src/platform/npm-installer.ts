@@ -6,6 +6,8 @@ import { ensureFileBackedAuthConfig, resolvePackageRoot } from "./codex-home.js"
 import { ensurePersonalMarketplaceEntry, removePersonalMarketplaceEntry } from "./marketplace.js";
 
 const COPY_ITEMS = [".codex-plugin", ".mcp.json", "assets", "skills"];
+const PLUGIN_DIR_NAME = "codex-keyring";
+const LEGACY_PLUGIN_DIR_NAME = "codex-accounts";
 
 export async function copyPluginPayload(packageRoot: string, pluginDir: string): Promise<void> {
   await mkdir(pluginDir, { recursive: true });
@@ -24,8 +26,10 @@ export async function installPlugin(
   manageAuth = true,
 ): Promise<InstallResult> {
   const packageRoot = await resolvePackageRoot(fromPath, COPY_ITEMS);
-  const pluginPath = path.join(store.env.codexPluginsDir, "codex-accounts");
+  const pluginPath = path.join(store.env.codexPluginsDir, PLUGIN_DIR_NAME);
+  const legacyPluginPath = path.join(store.env.codexPluginsDir, LEGACY_PLUGIN_DIR_NAME);
   await copyPluginPayload(packageRoot, pluginPath);
+  await rm(legacyPluginPath, { recursive: true, force: true });
   await ensurePersonalMarketplaceEntry(store.env);
 
   const state = await store.getState();
@@ -58,8 +62,12 @@ export async function installPlugin(
 }
 
 export async function uninstallPlugin(store: AccountStore): Promise<void> {
-  const pluginPath = path.join(store.env.codexPluginsDir, "codex-accounts");
-  await rm(pluginPath, { recursive: true, force: true });
+  const pluginPath = path.join(store.env.codexPluginsDir, PLUGIN_DIR_NAME);
+  const legacyPluginPath = path.join(store.env.codexPluginsDir, LEGACY_PLUGIN_DIR_NAME);
+  await Promise.all([
+    rm(pluginPath, { recursive: true, force: true }),
+    rm(legacyPluginPath, { recursive: true, force: true }),
+  ]);
   await removePersonalMarketplaceEntry(store.env);
 
   const state = await store.getState();

@@ -29,7 +29,7 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
 
   const server = new Server(
     {
-      name: "codex-accounts",
+      name: "codex-keyring",
       version: "0.3.0",
     },
     {

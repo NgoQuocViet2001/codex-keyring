@@ -1,14 +1,14 @@
 {
-  "name": "codex-accounts",
+  "name": "codex-keyring",
   "version": "0.3.0",
-  "description": "Native multi-account manager for Codex app, CLI, and IDE extension.",
+  "description": "Native multi-account manager for Codex with manual alias switching and auto-switch failover.",
   "author": {
     "name": "NgoQuocViet2001",
     "email": "ngoquocviet2001@gmail.com",
-    "url": "https://github.com/ngoquocviet2001/codex-accounts"
+    "url": "https://github.com/ngoquocviet2001/codex-keyring"
   },
-  "homepage": "https://github.com/ngoquocviet2001/codex-accounts",
-  "repository": "https://github.com/ngoquocviet2001/codex-accounts",
+  "homepage": "https://github.com/ngoquocviet2001/codex-keyring",
+  "repository": "https://github.com/ngoquocviet2001/codex-keyring",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -19,18 +19,18 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Codex Accounts",
-    "shortDescription": "Manage multiple Codex accounts with aliases and safe switching",
-    "longDescription": "Install a native Codex extension that manages multiple Codex sign-ins with aliases, safe switching, installer automation, and account health visibility without using a proxy.",
+    "displayName": "Codex Keyring",
+    "shortDescription": "Multi-account Codex manager with manual switch and auto-switch failover",
+    "longDescription": "Manage multiple Codex sign-ins under aliases, switch accounts manually in one command, or auto-switch after quota, rate-limit, auth-expiry, and workspace-mismatch failures without using a proxy.",
     "developerName": "NgoQuocViet2001",
     "category": "Productivity",
     "capabilities": [
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/ngoquocviet2001/codex-accounts",
-    "privacyPolicyURL": "https://github.com/ngoquocviet2001/codex-accounts/blob/main/README.md",
-    "termsOfServiceURL": "https://github.com/ngoquocviet2001/codex-accounts/blob/main/README.md",
+    "websiteURL": "https://github.com/ngoquocviet2001/codex-keyring",
+    "privacyPolicyURL": "https://github.com/ngoquocviet2001/codex-keyring/blob/main/README.md",
+    "termsOfServiceURL": "https://github.com/ngoquocviet2001/codex-keyring/blob/main/README.md",
     "defaultPrompt": [
       "List all Codex accounts that are currently registered and show which alias is active.",
       "Switch the active Codex account to the alias I specify and explain the current account health."

@@ -1,7 +1,12 @@
 import * as TOML from "@iarna/toml";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+
+const PRODUCT_SLUG = "codex-keyring";
+const LEGACY_PRODUCT_SLUG = "codex-accounts";
+const MANAGED_CONFIG_KEY = "codex_keyring";
+const LEGACY_MANAGED_CONFIG_KEY = "codex_accounts";
 
 export interface CodexEnvironment {
   userHome: string;
@@ -13,7 +18,8 @@ export interface CodexEnvironment {
   codexPluginsDir: string;
   personalMarketplacePath: string;
   personalMarketplaceRoot: string;
-  codexAccountsHome: string;
+  codexKeyringHome: string;
+  legacyCodexAccountsHome: string;
 }
 
 export interface ManagedAuthResult {
@@ -68,8 +74,28 @@ export function getCodexEnvironment(customCodexHome?: string): CodexEnvironment 
     codexPluginsDir: path.join(codexHome, "plugins"),
     personalMarketplacePath: path.join(userHome, ".agents", "plugins", "marketplace.json"),
     personalMarketplaceRoot: userHome,
-    codexAccountsHome: path.join(userHome, ".codex-accounts"),
+    codexKeyringHome: path.join(userHome, `.${PRODUCT_SLUG}`),
+    legacyCodexAccountsHome: path.join(userHome, `.${LEGACY_PRODUCT_SLUG}`),
   };
+}
+
+function getManagedProductConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const current = config[MANAGED_CONFIG_KEY];
+  if (current && typeof current === "object" && !Array.isArray(current)) {
+    return { ...(current as Record<string, unknown>) };
+  }
+
+  const legacy = config[LEGACY_MANAGED_CONFIG_KEY];
+  if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) {
+    return { ...(legacy as Record<string, unknown>) };
+  }
+
+  return {};
+}
+
+function setManagedProductConfig(config: Record<string, unknown>, value: Record<string, unknown>): void {
+  config[MANAGED_CONFIG_KEY] = value;
+  delete config[LEGACY_MANAGED_CONFIG_KEY];
 }
 
 export async function loadCodexConfig(env: CodexEnvironment): Promise<Record<string, unknown>> {
@@ -100,10 +126,10 @@ export async function ensureFileBackedAuthConfig(env: CodexEnvironment): Promise
   }
 
   config.cli_auth_credentials_store = "file";
-  const codexAccounts = ((config.codex_accounts as Record<string, unknown> | undefined) ?? {});
-  codexAccounts.managed_by = "codex-accounts";
-  codexAccounts.updated_at = new Date().toISOString();
-  config.codex_accounts = codexAccounts;
+  const codexKeyring = getManagedProductConfig(config);
+  codexKeyring.managed_by = PRODUCT_SLUG;
+  codexKeyring.updated_at = new Date().toISOString();
+  setManagedProductConfig(config, codexKeyring);
 
   await saveCodexConfig(env, config);
   return { changed: true, previousStore };
@@ -127,6 +153,16 @@ export async function pathExists(targetPath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function migrateLegacyKeyringHome(env: CodexEnvironment): Promise<boolean> {
+  if ((await pathExists(env.codexKeyringHome)) || !(await pathExists(env.legacyCodexAccountsHome))) {
+    return false;
+  }
+
+  await mkdir(path.dirname(env.codexKeyringHome), { recursive: true });
+  await rename(env.legacyCodexAccountsHome, env.codexKeyringHome);
+  return true;
 }
 
 async function hasRequiredEntries(rootPath: string, requiredEntries: string[]): Promise<boolean> {

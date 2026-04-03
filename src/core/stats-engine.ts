@@ -81,7 +81,7 @@ export async function refreshStatsForAlias(store: AccountStore, alias: string): 
     windowType,
     notes: meta.manualWindow
       ? "Quota window is manually annotated."
-      : "Counts come from codex-accounts events; token estimates are not yet inferred from Codex internals.",
+      : "Counts come from codex-keyring events; token estimates are not yet inferred from Codex internals.",
   };
 
   await store.saveStats(alias, stats);
