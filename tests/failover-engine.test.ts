@@ -62,6 +62,11 @@ describe("failover-engine", () => {
     expect(classifyFailure("Mình muốn thêm quota 5h và quota tuần cho command stats")).toBeUndefined();
   });
 
+  it("classifies common 403 errors as workspace mismatch", () => {
+    expect(classifyFailure("HTTP 403 Forbidden")).toBe("workspace-mismatch");
+    expect(classifyFailure('{"status_code":403,"message":"forbidden"}')).toBe("workspace-mismatch");
+  });
+
   it("only auto-switches for supported reasons", () => {
     expect(shouldAutoSwitch("rate-limited")).toBe(true);
     expect(shouldAutoSwitch("manual")).toBe(false);

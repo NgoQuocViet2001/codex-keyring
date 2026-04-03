@@ -9,7 +9,16 @@ const BALANCED_WEEK_REBALANCE_MARGIN = 10;
 const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
   {
     reason: "workspace-mismatch",
-    patterns: [/workspace mismatch/i, /workspace policy/i, /rbac/i, /permission denied/i, /organization policy/i],
+    patterns: [
+      /workspace mismatch/i,
+      /workspace policy/i,
+      /rbac/i,
+      /permission denied/i,
+      /organization policy/i,
+      /forbidden/i,
+      /\b403\b/u,
+      /status_code":403/i,
+    ],
   },
   {
     reason: "auth-expired",
