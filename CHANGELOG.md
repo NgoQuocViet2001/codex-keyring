@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3
+
+- Republish the latest quota-aware switching and manual-only behavior with the refreshed English and Vietnamese guides so GitHub and npm stay aligned
+- Keep release metadata in sync for the plugin manifest, MCP server version, and package manifest
+
 ## 0.5.2
 
 - Turn global auto-switch `off` automatically when the active alias becomes `manual-only`, including after a manual `switch` or `auto-account <alias> off`
