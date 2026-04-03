@@ -3,7 +3,16 @@ import type { AccountRecord, FailoverReason } from "./types.js";
 const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
   {
     reason: "workspace-mismatch",
-    patterns: [/workspace mismatch/i, /workspace policy/i, /rbac/i, /permission denied/i, /organization policy/i],
+    patterns: [
+      /workspace mismatch/i,
+      /workspace policy/i,
+      /rbac/i,
+      /permission denied/i,
+      /organization policy/i,
+      /forbidden/i,
+      /\b403\b/u,
+      /status_code":403/i,
+    ],
   },
   {
     reason: "auth-expired",

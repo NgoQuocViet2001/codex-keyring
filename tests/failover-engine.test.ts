@@ -10,6 +10,11 @@ describe("failover-engine", () => {
     expect(classifyFailure('{"type":"usage_limit_reached"}')).toBe("quota-exhausted");
   });
 
+  it("classifies common 403 errors as workspace mismatch", () => {
+    expect(classifyFailure("HTTP 403 Forbidden")).toBe("workspace-mismatch");
+    expect(classifyFailure('{"status_code":403,"message":"forbidden"}')).toBe("workspace-mismatch");
+  });
+
   it("only auto-switches for supported reasons", () => {
     expect(shouldAutoSwitch("rate-limited")).toBe(true);
     expect(shouldAutoSwitch("manual")).toBe(false);
