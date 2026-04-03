@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Codex Accounts icon">
+  <rect width="128" height="128" rx="28" fill="#0A6E6E"/>
+  <circle cx="46" cy="48" r="18" fill="#D8FFF8"/>
+  <circle cx="82" cy="48" r="18" fill="#8AE1D5"/>
+  <path d="M24 98c5-18 17-27 36-27s31 9 36 27" fill="none" stroke="#D8FFF8" stroke-width="10" stroke-linecap="round"/>
+  <path d="M52 98c5-12 15-18 30-18s25 6 30 18" fill="none" stroke="#8AE1D5" stroke-width="10" stroke-linecap="round"/>
+</svg>

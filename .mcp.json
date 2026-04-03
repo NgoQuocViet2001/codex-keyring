@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codex-accounts": {
+      "type": "stdio",
+      "command": "codex-accounts",
+      "args": [
+        "mcp"
+      ],
+      "note": "Local stdio MCP server for codex-accounts. Exposes alias management and status tools to Codex app, CLI, and IDE extension."
+    }
+  }
+}

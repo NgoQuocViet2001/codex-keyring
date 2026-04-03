@@ -1,0 +1,64 @@
+{
+  "name": "codex-accounts",
+  "version": "0.3.0",
+  "description": "Native multi-account manager and plugin installer for Codex app, CLI, and IDE extension.",
+  "type": "module",
+  "packageManager": "npm@11.11.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "codex-accounts": "dist/src/cli/index.js"
+  },
+  "files": [
+    "dist",
+    ".codex-plugin",
+    ".mcp.json",
+    "assets",
+    "skills",
+    "README.md",
+    "README.vi.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsx src/cli/index.ts",
+    "dev:mcp": "tsx src/cli/index.ts mcp",
+    "test": "vitest run",
+    "pack:local": "npm pack",
+    "install:plugin": "tsx scripts/install-plugin.ts",
+    "uninstall:plugin": "tsx scripts/uninstall-plugin.ts",
+    "migrate:store": "tsx scripts/migrate-store.ts",
+    "smoke:install": "tsx scripts/smoke-install.ts",
+    "release:check": "tsx scripts/release-guard.ts"
+  },
+  "keywords": [
+    "codex",
+    "openai",
+    "plugin",
+    "extension",
+    "accounts",
+    "auth"
+  ],
+  "author": "NgoQuocViet2001 <ngoquocviet2001@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/ngoquocviet2001/codex-accounts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ngoquocviet2001/codex-accounts.git"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

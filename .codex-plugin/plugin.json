@@ -1,0 +1,45 @@
+{
+  "name": "codex-accounts",
+  "version": "0.3.0",
+  "description": "Native multi-account manager for Codex app, CLI, and IDE extension.",
+  "author": {
+    "name": "NgoQuocViet2001",
+    "email": "ngoquocviet2001@gmail.com",
+    "url": "https://github.com/ngoquocviet2001/codex-accounts"
+  },
+  "homepage": "https://github.com/ngoquocviet2001/codex-accounts",
+  "repository": "https://github.com/ngoquocviet2001/codex-accounts",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "accounts",
+    "auth",
+    "plugin"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Accounts",
+    "shortDescription": "Manage multiple Codex accounts with aliases and safe switching",
+    "longDescription": "Install a native Codex extension that manages multiple Codex sign-ins with aliases, safe switching, installer automation, and account health visibility without using a proxy.",
+    "developerName": "NgoQuocViet2001",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ngoquocviet2001/codex-accounts",
+    "privacyPolicyURL": "https://github.com/ngoquocviet2001/codex-accounts/blob/main/README.md",
+    "termsOfServiceURL": "https://github.com/ngoquocviet2001/codex-accounts/blob/main/README.md",
+    "defaultPrompt": [
+      "List all Codex accounts that are currently registered and show which alias is active.",
+      "Switch the active Codex account to the alias I specify and explain the current account health."
+    ],
+    "brandColor": "#0A6E6E",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.svg",
+    "screenshots": [
+      "./assets/screenshots/README.md"
+    ]
+  }
+}
