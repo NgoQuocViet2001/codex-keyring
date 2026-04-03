@@ -575,6 +575,7 @@ export async function reconcileHostFailover(
     const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
       mode: state.autoSwitchMode,
       reason: latestActiveAliasReason,
+      allowRebalance: latestActiveAliasReason !== undefined,
     });
     if (nextAlias) {
       await switchActiveAlias(store, nextAlias, latestActiveAliasReason ?? "quota-rebalance");

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Replace `codex-keyring auto on|off --mode ...` with a single `codex-keyring auto off|balanced|sequential` command
+- Add per-alias manual-only participation so specific accounts can be excluded from auto-switch while remaining available for manual switching
+- Make `balanced` auto-switch score both 5-hour and weekly remaining quota, instead of looking only at short-window headroom
+- Keep startup behavior steadier by avoiding proactive rebalance during passive host-log reconciliation unless the active alias has actually hit a supported failure or is already blocked
+- Clarify that uninstall leaves the currently active auth cache in place, so the account that was active stays active after the plugin is removed
+
 ## 0.4.0
 
 - Add exact quota parsing from Codex host `codex.rate_limits` signals and `usage_limit_reached` headers, including 5-hour and weekly remaining percentages plus reset timestamps

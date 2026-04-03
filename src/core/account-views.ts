@@ -9,6 +9,7 @@ export interface PublicAccountView {
   email?: string;
   organization?: string;
   planType?: string;
+  manualOnly: boolean;
   active: boolean;
   authMode: AuthMode;
   priority: number;
@@ -41,6 +42,7 @@ export interface StatusAliasView {
   email?: string;
   organization?: string;
   planType?: string;
+  manualOnly: boolean;
   active: boolean;
   authMode: AuthMode;
   health: HealthState;
@@ -83,6 +85,7 @@ function toPublicAccountView(record: {
     email?: string;
     organization?: string;
     planType?: string;
+    manualOnly: boolean;
     authMode: AuthMode;
     priority: number;
     fingerprint: string;
@@ -125,6 +128,7 @@ function toPublicAccountView(record: {
     email: record.meta.email ?? identity.email,
     organization,
     planType,
+    manualOnly: record.meta.manualOnly,
     active: record.active,
     authMode: record.meta.authMode,
     priority: record.meta.priority,
@@ -168,6 +172,7 @@ export async function getStatusView(store: AccountStore): Promise<StatusView> {
       email: account.email,
       organization: account.organization,
       planType: account.planType,
+      manualOnly: account.manualOnly,
       active: account.active,
       authMode: account.authMode,
       health: account.health,

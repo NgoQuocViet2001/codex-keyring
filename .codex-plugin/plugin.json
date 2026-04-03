@@ -1,6 +1,6 @@
 {
   "name": "codex-keyring",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Native multi-account manager for Codex with quota-aware switching and smoother auto-switch failover.",
   "author": {
     "name": "NgoQuocViet2001",
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Codex Keyring",
     "shortDescription": "Multi-account Codex manager with quota-aware switching",
-    "longDescription": "Manage multiple Codex sign-ins under aliases, switch manually in one command, or auto-switch with balanced and sequential quota-aware modes after supported quota, rate-limit, auth-expiry, and workspace-mismatch signals without using a proxy.",
+    "longDescription": "Manage multiple Codex sign-ins under aliases, switch manually in one command, or auto-switch in off, balanced, or sequential modes while respecting per-alias manual-only exclusions and supported quota, rate-limit, auth-expiry, and workspace-mismatch signals without using a proxy.",
     "developerName": "NgoQuocViet2001",
     "category": "Productivity",
     "capabilities": [

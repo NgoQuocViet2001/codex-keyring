@@ -41,11 +41,15 @@ function formatRemainingPercent(value?: number): string {
 
 function assertAutoSwitchMode(value: string): AutoSwitchMode {
   const normalized = value.trim().toLowerCase();
-  if (normalized === "balanced" || normalized === "sequential") {
+  if (normalized === "off" || normalized === "balanced" || normalized === "sequential") {
     return normalized;
   }
 
-  throw new Error("Auto-switch mode must be `balanced` or `sequential`.");
+  throw new Error("Auto-switch mode must be `off`, `balanced`, or `sequential`.");
+}
+
+function formatSwitchingMode(manualOnly: boolean): string {
+  return manualOnly ? "manual-only" : "auto";
 }
 
 async function runCodexLogin(tempHome: string, deviceAuth: boolean): Promise<void> {
@@ -90,6 +94,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
 
       const showOrganization = records.some((record) => Boolean(record.organization));
       const showPlanType = records.some((record) => Boolean(record.planType));
+      const showSwitching = records.some((record) => record.manualOnly);
 
       printTable(
         records.map((record) => {
@@ -105,6 +110,9 @@ export function registerAccountCommands(program: Command, context: CliContext): 
           }
           row.active = record.active;
           row.health = record.health;
+          if (showSwitching) {
+            row.switching = formatSwitchingMode(record.manualOnly);
+          }
           row["5h left"] = formatRemainingPercent(record.limit5hRemainingPercent);
           row["week left"] = formatRemainingPercent(record.limitWeekRemainingPercent);
           return row;
@@ -125,9 +133,9 @@ export function registerAccountCommands(program: Command, context: CliContext): 
       }
 
       console.log(`Active alias : ${payload.state.activeAlias ?? "(none)"}`);
-      console.log(`Auto-switch  : ${payload.state.autoSwitch ? "on" : "off"}`);
-      console.log(`Auto mode    : ${payload.state.autoSwitchMode}`);
+      console.log(`Auto-switch  : ${payload.state.autoSwitchMode}`);
       console.log(`Managed mode : ${payload.state.managedAuthMode ? "on" : "off"}`);
+      const showSwitching = payload.aliases.some((alias) => alias.manualOnly);
       printTable(
         payload.aliases.map((alias) => ({
           alias: alias.alias,
@@ -135,6 +143,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
           planType: alias.planType ?? "",
           active: alias.active,
           health: alias.health,
+          ...(showSwitching ? { switching: formatSwitchingMode(alias.manualOnly) } : {}),
           "5h left": formatRemainingPercent(alias.limit5hRemainingPercent),
           "week left": formatRemainingPercent(alias.limitWeekRemainingPercent),
         })) as Array<Record<string, unknown>>,
@@ -198,25 +207,40 @@ export function registerAccountCommands(program: Command, context: CliContext): 
         printJson(payload);
         return;
       }
-      printInfo(payload as unknown as Record<string, unknown>);
+      const printable = {
+        ...payload,
+        switching: formatSwitchingMode(payload.manualOnly),
+      } as Record<string, unknown>;
+      delete printable.manualOnly;
+      printInfo(printable);
     });
 
   program
     .command("auto")
-    .description("Enable or disable supported auto-switch")
+    .description("Set the global auto-switch mode")
+    .argument("<mode>", "off, balanced, or sequential")
+    .action(async (mode: string) => {
+      const state = await context.store.getState();
+      state.autoSwitchMode = assertAutoSwitchMode(mode);
+      state.autoSwitch = state.autoSwitchMode !== "off";
+      await context.store.saveState(state);
+      console.log(`Auto-switch mode is now ${state.autoSwitchMode}.`);
+    });
+
+  program
+    .command("auto-account")
+    .description("Include or exclude one alias from auto-switch")
+    .argument("<alias>", "Alias to update")
     .argument("<mode>", "on or off")
-    .option("--mode <autoSwitchMode>", "balanced or sequential", "balanced")
-    .action(async (mode: string, options: { mode?: string }) => {
+    .action(async (alias: string, mode: string) => {
+      const normalizedAlias = normalizeAlias(alias);
       const normalizedMode = mode.trim().toLowerCase();
       if (normalizedMode !== "on" && normalizedMode !== "off") {
         throw new Error("Mode must be `on` or `off`.");
       }
 
-      const state = await context.store.getState();
-      state.autoSwitch = normalizedMode === "on";
-      state.autoSwitchMode = assertAutoSwitchMode(options.mode ?? state.autoSwitchMode);
-      await context.store.saveState(state);
-      console.log(`Auto-switch is now ${state.autoSwitch ? "enabled" : "disabled"} (${state.autoSwitchMode}).`);
+      const meta = await context.store.setManualOnly(normalizedAlias, normalizedMode === "off");
+      console.log(`${meta.alias} is now ${meta.manualOnly ? "manual-only" : "eligible"} for auto-switch.`);
     });
 
   program
@@ -225,12 +249,13 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("<alias>", "Alias to register")
     .option("--device-auth", "Use codex login --device-auth")
     .option("--from-active", "Capture the current ~/.codex/auth.json without logging in again")
+    .option("--manual-only", "Register this alias for manual switching only")
     .option("--priority <number>", "Priority for failover ordering", Number.parseInt)
     .option("--notes <text>", "Optional notes for the alias")
     .action(
       async (
         alias: string,
-        options: { deviceAuth?: boolean; fromActive?: boolean; priority?: number; notes?: string },
+        options: { deviceAuth?: boolean; fromActive?: boolean; manualOnly?: boolean; priority?: number; notes?: string },
       ) => {
         const normalizedAlias = normalizeAlias(alias);
         let sourcePath = context.store.env.codexAuthPath;
@@ -244,7 +269,10 @@ export function registerAccountCommands(program: Command, context: CliContext): 
           }
 
           const snapshot = await captureSnapshot(sourcePath, options.fromActive ? "active-auth" : "login-flow");
-          const input: { priority?: number; notes?: string } = {};
+          const input: { manualOnly?: boolean; priority?: number; notes?: string } = {};
+          if (options.manualOnly) {
+            input.manualOnly = true;
+          }
           if (Number.isFinite(options.priority)) {
             input.priority = options.priority;
           }
@@ -259,7 +287,9 @@ export function registerAccountCommands(program: Command, context: CliContext): 
             await context.store.saveState(state);
           }
 
-          console.log(`Registered alias ${meta.alias} (${meta.authMode}, ${meta.fingerprint}).`);
+          console.log(
+            `Registered alias ${meta.alias} (${meta.authMode}, ${meta.fingerprint}${meta.manualOnly ? ", manual-only" : ""}).`,
+          );
         } finally {
           if (tempHome) {
             await rm(tempHome, { recursive: true, force: true });

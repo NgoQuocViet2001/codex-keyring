@@ -36,16 +36,24 @@ function defaultState(): CodexKeyringState {
     createdAt: timestamp,
     updatedAt: timestamp,
     autoSwitch: false,
-    autoSwitchMode: "balanced",
+    autoSwitchMode: "off",
     managedAuthMode: false,
   };
 }
 
 function normalizeState(state: CodexKeyringState): CodexKeyringState {
+  const autoSwitchMode =
+    state.autoSwitchMode === "sequential"
+      ? "sequential"
+      : state.autoSwitchMode === "balanced"
+        ? "balanced"
+        : state.autoSwitch === false
+          ? "off"
+          : "balanced";
   return {
     ...state,
-    autoSwitch: Boolean(state.autoSwitch),
-    autoSwitchMode: state.autoSwitchMode === "sequential" ? "sequential" : "balanced",
+    autoSwitch: autoSwitchMode !== "off",
+    autoSwitchMode,
   };
 }
 
@@ -76,6 +84,13 @@ async function readEventLog(filePath: string): Promise<SwitchEvent[]> {
 async function writeEventLog(filePath: string, events: SwitchEvent[]): Promise<void> {
   const body = events.map((event: SwitchEvent) => JSON.stringify(event)).join("\n");
   await writeFile(filePath, body ? `${body}\n` : "", "utf8");
+}
+
+function normalizeMetaRecord(meta: AccountMeta): AccountMeta {
+  return {
+    ...meta,
+    manualOnly: Boolean(meta.manualOnly),
+  };
 }
 
 function resolveAliasLineage(events: SwitchEvent[], alias: string): Set<string> {
@@ -231,7 +246,7 @@ export class AccountStore {
   }
 
   async getMeta(alias: string): Promise<AccountMeta> {
-    return readJsonFile<AccountMeta>(this.metaPath(alias));
+    return normalizeMetaRecord(await readJsonFile<AccountMeta>(this.metaPath(alias)));
   }
 
   async mergeMeta(
@@ -268,7 +283,7 @@ export class AccountStore {
   async upsertAccount(
     alias: string,
     snapshot: AccountSnapshot,
-    input: Partial<Pick<AccountMeta, "displayName" | "priority" | "notes" | "manualWindow">> = {},
+    input: Partial<Pick<AccountMeta, "displayName" | "priority" | "notes" | "manualOnly" | "manualWindow">> = {},
   ): Promise<AccountMeta> {
     const normalizedAlias = normalizeAlias(alias);
     const existing = (await pathExists(this.metaPath(normalizedAlias))) ? await this.getMeta(normalizedAlias) : undefined;
@@ -280,6 +295,7 @@ export class AccountStore {
       alias: normalizedAlias,
       displayName: input.displayName ?? existing?.displayName ?? normalizedAlias,
       priority: input.priority ?? existing?.priority ?? 100,
+      manualOnly: input.manualOnly ?? existing?.manualOnly ?? false,
       notes: input.notes ?? existing?.notes,
       email: identity.email ?? existing?.email,
       organization: identity.organization ?? existing?.organization,
@@ -307,6 +323,19 @@ export class AccountStore {
     return meta;
   }
 
+  async setManualOnly(alias: string, manualOnly: boolean): Promise<AccountMeta> {
+    const normalizedAlias = normalizeAlias(alias);
+    const meta = await this.getMeta(normalizedAlias);
+    const next: AccountMeta = {
+      ...meta,
+      manualOnly,
+      updatedAt: now(),
+    };
+
+    await writeJsonFile(this.metaPath(normalizedAlias), next);
+    return next;
+  }
+
   async listAliases(): Promise<string[]> {
     await this.ensureStore();
     const entries = await readdir(this.accountsDir, { withFileTypes: true });
@@ -332,7 +361,12 @@ export class AccountStore {
       });
     }
 
-    return records.sort((left, right) => left.meta.priority - right.meta.priority || left.meta.alias.localeCompare(right.meta.alias));
+    return records.sort(
+      (left, right) =>
+        Number(right.active) - Number(left.active) ||
+        left.meta.priority - right.meta.priority ||
+        left.meta.alias.localeCompare(right.meta.alias),
+    );
   }
 
   async removeAccount(alias: string): Promise<void> {
@@ -377,6 +411,7 @@ export class AccountStore {
     const meta = await this.getMeta(newAlias);
     meta.alias = newAlias;
     meta.displayName = meta.displayName === oldAlias ? newAlias : meta.displayName;
+    meta.manualOnly = Boolean(meta.manualOnly);
     meta.updatedAt = now();
     await writeJsonFile(this.metaPath(newAlias), meta);
 

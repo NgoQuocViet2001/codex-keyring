@@ -10,7 +10,7 @@ It stays close to the official Codex experience:
 - store account snapshots under simple aliases
 - switch the active Codex auth cache atomically
 - surface the most useful quota signals, especially 5-hour and weekly remaining limits
-- enable auto-switch with `balanced` and `sequential` quota-aware modes
+- enable auto-switch with `off`, `balanced`, and `sequential` quota-aware modes
 - install a local plugin and MCP server for Codex app and IDE usage
 
 For Vietnamese documentation, see [README.vi.md](./README.vi.md).
@@ -117,18 +117,28 @@ codex-keyring switch account1
 ### Enable Auto-Switch Failover
 
 ```bash
-codex-keyring auto on --mode balanced
+codex-keyring auto balanced
 codex-keyring exec codex -- --help
 ```
 
-There are two auto-switch modes:
+There are three auto-switch modes:
 
-- `balanced` is the default. It tries to spread 5-hour quota before an account hits the wall. If the active alias drops below practical thresholds and another alias has more headroom, `codex-keyring` switches early.
+- `off` disables automatic switching completely.
+- `balanced` is the smart mode. It scores both 5-hour and weekly remaining quota so one account does not get burned down while another stays mostly unused. It still keeps the current active alias stable unless a supported failure happens or the active alias is already close to a wall.
 - `sequential` keeps the current alias until it is effectively blocked, then moves to the best alias still known to have quota.
 
 `codex-keyring exec` can now switch the active auth cache as soon as a live CLI session emits a supported quota or auth failure. If the process still exits, it retries one fresh process exactly once after the failover.
 
 For Codex app and the IDE extension, `codex-keyring` also reconciles recent host-side quota, rate-limit, auth-expiry, and workspace-mismatch signals so the next request or reopened session can pick up another alias. In-flight requests still do not continue seamlessly after the failure that already happened.
+
+### Keep One Alias Manual-Only
+
+```bash
+codex-keyring add account3 --manual-only
+codex-keyring auto-account account3 off
+```
+
+Use this when an alias should remain available for manual switching but must never be chosen automatically.
 
 ### Rename or Remove an Alias
 
@@ -158,12 +168,14 @@ Removing the active alias requires `--force`.
 | `codex-keyring info <alias>` | show safe details for one alias | includes email, organization, and plan details when available |
 | `codex-keyring stats [alias]` | show quota-aware stats for one or all aliases | includes 5-hour and weekly quota when known; supports `--json` |
 | `codex-keyring add <alias>` | add an alias through official login | browser OAuth by default |
+| `codex-keyring add <alias> --manual-only` | add an alias that never participates in auto-switch | still available for manual `switch` |
 | `codex-keyring add <alias> --device-auth` | add an alias through official device auth | may be blocked by org policy |
 | `codex-keyring add <alias> --from-active` | capture the current active auth | no new login |
 | `codex-keyring switch <alias>` | make an alias active | atomic and backup-aware |
 | `codex-keyring remove <alias>` | remove an alias | active alias requires `--force` |
 | `codex-keyring rename <old> <new>` | rename an alias | preserves snapshot |
-| `codex-keyring auto on\|off --mode balanced\|sequential` | enable or disable auto-switch | `balanced` is the default |
+| `codex-keyring auto off\|balanced\|sequential` | set the global auto-switch mode | `balanced` is the smart mode |
+| `codex-keyring auto-account <alias> on\|off` | include or exclude one alias from auto-switch | `off` means manual-only |
 | `codex-keyring exec -- <command>` | run a command with failover support | retries once after a supported switch |
 | `codex-keyring install` | install the plugin and enable managed mode | supports `--no-manage-auth` |
 | `codex-keyring uninstall` | remove the plugin from the marketplace | store data remains |
@@ -198,6 +210,10 @@ codex-keyring add account2 --from-active
 
 Run `codex-keyring doctor`, confirm the marketplace check passes, then restart Codex app or reload the IDE extension session.
 
+### A Newly Added Account Does Not Show the Same Codex UI Settings
+
+`codex-keyring` only switches the official local auth cache. Account-specific Codex cloud preferences such as language, UI experiments, or missing server-side settings are not stored inside `auth.json`, so they cannot be copied from one account to another.
+
 ### `info` Does Not Show the Business Workspace Name
 
 `codex-keyring` only shows identity fields exposed by the official local Codex auth cache. On some business-managed accounts, the selected workspace title in the Codex UI is not present in the local auth snapshot, so `info` may only show email and plan details.
@@ -207,6 +223,10 @@ Run `codex-keyring doctor`, confirm the marketplace check passes, then restart C
 Make sure auto-switch is enabled, another alias is available, and the failure matches a supported category such as quota, rate limit, auth expiry, or workspace mismatch.
 
 For Codex app and IDE usage, the switch is best-effort for the next request or reopened session after the host logs a supported failure. It does not rescue the request that already failed.
+
+### What `uninstall` Leaves Behind
+
+`codex-keyring uninstall` removes the plugin and marketplace entry, but it leaves the current `~/.codex/auth.json` in place. In practice, whichever alias was active at uninstall time remains the active Codex login afterward.
 
 ## License
 

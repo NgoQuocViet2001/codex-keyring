@@ -81,6 +81,39 @@ function hostRows(): HostLogRow[] {
   ];
 }
 
+function quotaOnlyRows(): HostLogRow[] {
+  return [
+    {
+      id: 201,
+      ts: 1_775_200_010,
+      threadId: "thread-2",
+      processUuid: "process-2",
+      body: 'session metadata user.email="alice@example.com"',
+    },
+    {
+      id: 202,
+      ts: 1_775_200_011,
+      threadId: "thread-2",
+      processUuid: "process-2",
+      body: 'websocket event: {"type":"codex.rate_limits","plan_type":"team","rate_limits":{"allowed":true,"limit_reached":false,"primary":{"used_percent":58,"window_minutes":300,"reset_after_seconds":13893,"reset_at":1775206534},"secondary":{"used_percent":5,"window_minutes":10080,"reset_after_seconds":600693,"reset_at":1775793334}}}',
+    },
+    {
+      id: 203,
+      ts: 1_775_200_012,
+      threadId: "thread-3",
+      processUuid: "process-3",
+      body: 'session metadata user.email="bob@example.com"',
+    },
+    {
+      id: 204,
+      ts: 1_775_200_013,
+      threadId: "thread-3",
+      processUuid: "process-3",
+      body: 'websocket event: {"type":"codex.rate_limits","plan_type":"team","rate_limits":{"allowed":true,"limit_reached":false,"primary":{"used_percent":12,"window_minutes":300,"reset_after_seconds":13893,"reset_at":1775206534},"secondary":{"used_percent":3,"window_minutes":10080,"reset_after_seconds":600693,"reset_at":1775793334}}}',
+    },
+  ];
+}
+
 describe("host-reconciliation", () => {
   it("records host-side limit hits and auto-switches the next active alias", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
@@ -143,5 +176,26 @@ describe("host-reconciliation", () => {
     expect(first.appendedEvents).toBeGreaterThan(1);
     expect(second.appendedEvents).toBe(0);
     expect(await store.listEvents("account1", 20)).toHaveLength(3);
+  });
+
+  it("does not proactively rebalance on passive quota observations alone", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
+
+    const store = new AccountStore(env);
+    await store.upsertAccount("account1", snapshot("acct-1", "alice@example.com"));
+    await store.upsertAccount("account2", snapshot("acct-2", "bob@example.com"));
+
+    const state = await store.getState();
+    state.activeAlias = "account1";
+    state.autoSwitch = true;
+    state.autoSwitchMode = "balanced";
+    state.managedAuthMode = true;
+    await store.saveState(state);
+
+    const result = await reconcileHostFailover(store, { rows: quotaOnlyRows() });
+    expect(result.switchedTo).toBeUndefined();
+    expect((await store.getState()).activeAlias).toBe("account1");
   });
 });

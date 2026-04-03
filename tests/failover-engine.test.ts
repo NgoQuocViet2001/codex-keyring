@@ -1,5 +1,56 @@
 import { describe, expect, it } from "vitest";
 import { classifyFailure, pickNextAlias, shouldAutoSwitch } from "../src/core/failover-engine.js";
+import type { AccountRecord } from "../src/core/types.js";
+
+function record(
+  alias: string,
+  options: {
+    active?: boolean;
+    manualOnly?: boolean;
+    priority?: number;
+    cooldownUntil?: string;
+    limit5hRemainingPercent?: number;
+    limit5hResetAt?: string;
+    limitWeekRemainingPercent?: number;
+    limitWeekResetAt?: string;
+    health?: "active" | "ready" | "cooldown" | "degraded" | "unknown";
+  } = {},
+): AccountRecord {
+  return {
+    active: options.active ?? false,
+    meta: {
+      alias,
+      displayName: alias,
+      priority: options.priority ?? 100,
+      manualOnly: options.manualOnly ?? false,
+      fingerprint: alias,
+      authMode: "chatgpt",
+      createdAt: "",
+      updatedAt: "",
+    },
+    snapshot: {
+      schemaVersion: 1,
+      capturedAt: "",
+      source: "active-auth",
+      auth: { auth_mode: "chatgpt" },
+    },
+    stats: {
+      alias,
+      authMode: "chatgpt",
+      active: options.active ?? false,
+      health: options.health ?? (options.active ? "active" : "ready"),
+      confidence: "exact",
+      cooldownUntil: options.cooldownUntil,
+      limit5hRemainingPercent: options.limit5hRemainingPercent,
+      limit5hResetAt: options.limit5hResetAt,
+      limitWeekRemainingPercent: options.limitWeekRemainingPercent,
+      limitWeekResetAt: options.limitWeekResetAt,
+      windowType: "codex-rate-limits",
+    },
+  };
+}
+
+const FAR_FUTURE = "2999-01-01T00:00:00.000Z";
 
 describe("failover-engine", () => {
   it("classifies supported quota and auth failures", () => {
@@ -17,27 +68,13 @@ describe("failover-engine", () => {
     expect(shouldAutoSwitch(undefined)).toBe(false);
   });
 
-  it("selects the next alias by priority while skipping cooldown", () => {
+  it("selects the next alias while skipping cooldown", () => {
     const next = pickNextAlias(
       "work",
       [
-        {
-          active: true,
-          meta: { alias: "work", priority: 10, displayName: "work", fingerprint: "a", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-          snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-          stats: { alias: "work", authMode: "chatgpt", active: true, health: "cooldown", confidence: "exact", cooldownUntil: "2999-01-01T00:00:00.000Z", windowType: "rolling-24h" },
-        },
-        {
-          active: false,
-          meta: { alias: "backup", priority: 20, displayName: "backup", fingerprint: "b", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-          snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-          stats: { alias: "backup", authMode: "chatgpt", active: false, health: "cooldown", confidence: "exact", cooldownUntil: "2999-01-01T00:00:00.000Z", windowType: "rolling-24h" },
-        },
-        {
-          active: false,
-          meta: { alias: "night", priority: 30, displayName: "night", fingerprint: "c", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-          snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-        },
+        record("work", { active: true, priority: 10, cooldownUntil: FAR_FUTURE, health: "cooldown" }),
+        record("backup", { priority: 20, cooldownUntil: FAR_FUTURE, health: "cooldown" }),
+        record("night", { priority: 30 }),
       ],
       { mode: "balanced", reason: "quota-exhausted" },
     );
@@ -45,101 +82,130 @@ describe("failover-engine", () => {
     expect(next).toBe("night");
   });
 
-  it("prefers the alias with the most 5h quota during reactive failover", () => {
+  it("uses both 5h and weekly headroom during reactive failover", () => {
     const next = pickNextAlias(
       "work",
       [
-        {
+        record("work", {
           active: true,
-          meta: { alias: "work", priority: 10, displayName: "work", fingerprint: "a", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-          snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-          stats: {
-            alias: "work",
-            authMode: "chatgpt",
-            active: true,
-            health: "cooldown",
-            confidence: "exact",
-            limit5hRemainingPercent: 0,
-            limit5hResetAt: "2999-01-01T00:00:00.000Z",
-            windowType: "codex-rate-limits",
-          },
-        },
-        {
-          active: false,
-          meta: { alias: "backup", priority: 20, displayName: "backup", fingerprint: "b", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-          snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-          stats: {
-            alias: "backup",
-            authMode: "chatgpt",
-            active: false,
-            health: "ready",
-            confidence: "exact",
-            limit5hRemainingPercent: 58,
-            limit5hResetAt: "2999-01-01T00:00:00.000Z",
-            limitWeekRemainingPercent: 92,
-            windowType: "codex-rate-limits",
-          },
-        },
-        {
-          active: false,
-          meta: { alias: "night", priority: 30, displayName: "night", fingerprint: "c", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-          snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-          stats: {
-            alias: "night",
-            authMode: "chatgpt",
-            active: false,
-            health: "ready",
-            confidence: "exact",
-            limit5hRemainingPercent: 21,
-            limit5hResetAt: "2999-01-01T00:00:00.000Z",
-            limitWeekRemainingPercent: 97,
-            windowType: "codex-rate-limits",
-          },
-        },
+          priority: 10,
+          health: "cooldown",
+          limit5hRemainingPercent: 0,
+          limit5hResetAt: FAR_FUTURE,
+          limitWeekRemainingPercent: 85,
+          limitWeekResetAt: FAR_FUTURE,
+        }),
+        record("backup", {
+          priority: 20,
+          limit5hRemainingPercent: 58,
+          limit5hResetAt: FAR_FUTURE,
+          limitWeekRemainingPercent: 18,
+          limitWeekResetAt: FAR_FUTURE,
+        }),
+        record("night", {
+          priority: 30,
+          limit5hRemainingPercent: 54,
+          limit5hResetAt: FAR_FUTURE,
+          limitWeekRemainingPercent: 83,
+          limitWeekResetAt: FAR_FUTURE,
+        }),
       ],
       { mode: "balanced", reason: "quota-exhausted" },
     );
 
-    expect(next).toBe("backup");
+    expect(next).toBe("night");
   });
 
   it("rebalances early in balanced mode but not in sequential mode", () => {
     const records = [
-      {
+      record("work", {
         active: true,
-        meta: { alias: "work", priority: 10, displayName: "work", fingerprint: "a", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-        snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-        stats: {
-          alias: "work",
-          authMode: "chatgpt",
-          active: true,
-          health: "active",
-          confidence: "exact",
-          limit5hRemainingPercent: 42,
-          limit5hResetAt: "2999-01-01T00:00:00.000Z",
-          limitWeekRemainingPercent: 95,
-          windowType: "codex-rate-limits",
-        },
-      },
-      {
-        active: false,
-        meta: { alias: "backup", priority: 20, displayName: "backup", fingerprint: "b", authMode: "chatgpt", createdAt: "", updatedAt: "" },
-        snapshot: { schemaVersion: 1, capturedAt: "", source: "active-auth", auth: { auth_mode: "chatgpt" } },
-        stats: {
-          alias: "backup",
-          authMode: "chatgpt",
-          active: false,
-          health: "ready",
-          confidence: "exact",
-          limit5hRemainingPercent: 81,
-          limit5hResetAt: "2999-01-01T00:00:00.000Z",
-          limitWeekRemainingPercent: 94,
-          windowType: "codex-rate-limits",
-        },
-      },
+        priority: 10,
+        limit5hRemainingPercent: 42,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 95,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("backup", {
+        priority: 20,
+        limit5hRemainingPercent: 81,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 94,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
     ];
 
     expect(pickNextAlias("work", records, { mode: "balanced" })).toBe("backup");
     expect(pickNextAlias("work", records, { mode: "sequential" })).toBeUndefined();
+  });
+
+  it("does not rebalance when rebalancing is disabled for stable startup checks", () => {
+    const records = [
+      record("work", {
+        active: true,
+        priority: 10,
+        limit5hRemainingPercent: 42,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 95,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("backup", {
+        priority: 20,
+        limit5hRemainingPercent: 81,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 94,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+    ];
+
+    expect(pickNextAlias("work", records, { mode: "balanced", allowRebalance: false })).toBeUndefined();
+  });
+
+  it("never auto-switches aliases marked manual-only", () => {
+    const records = [
+      record("work", {
+        active: true,
+        manualOnly: true,
+        limit5hRemainingPercent: 0,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 80,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("backup", {
+        limit5hRemainingPercent: 88,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 90,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+    ];
+
+    expect(pickNextAlias("work", records, { mode: "balanced", reason: "quota-exhausted" })).toBeUndefined();
+  });
+
+  it("ignores manual-only candidates during auto-switch", () => {
+    const records = [
+      record("work", {
+        active: true,
+        limit5hRemainingPercent: 0,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 70,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("backup", {
+        manualOnly: true,
+        limit5hRemainingPercent: 95,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 95,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+      record("night", {
+        limit5hRemainingPercent: 60,
+        limit5hResetAt: FAR_FUTURE,
+        limitWeekRemainingPercent: 60,
+        limitWeekResetAt: FAR_FUTURE,
+      }),
+    ];
+
+    expect(pickNextAlias("work", records, { mode: "balanced", reason: "quota-exhausted" })).toBe("night");
   });
 });

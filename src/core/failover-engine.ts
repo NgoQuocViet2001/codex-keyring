@@ -1,6 +1,8 @@
 import type { AccountRecord, AutoSwitchMode, FailoverReason } from "./types.js";
 
 const BALANCED_THRESHOLDS = [50, 20, 5];
+const BALANCED_SCORE_5H_WEIGHT = 0.7;
+const BALANCED_SCORE_WEEK_WEIGHT = 0.3;
 
 const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
   {
@@ -35,7 +37,10 @@ interface AliasCandidate {
   remaining5h?: number;
   remainingWeek?: number;
   blocked: boolean;
+  manualOnly: boolean;
   bucket: number;
+  level: number;
+  score: number;
 }
 
 function remaining5h(record: AccountRecord, now: number): number | undefined {
@@ -76,25 +81,66 @@ function isBlocked(record: AccountRecord, now: number): boolean {
     return true;
   }
 
-  const quotaRemaining = remaining5h(record, now);
-  return quotaRemaining !== undefined && quotaRemaining <= 0;
+  const quotaRemaining5h = remaining5h(record, now);
+  if (quotaRemaining5h !== undefined && quotaRemaining5h <= 0) {
+    return true;
+  }
+
+  const quotaRemainingWeek = remainingWeek(record, now);
+  return quotaRemainingWeek !== undefined && quotaRemainingWeek <= 0;
+}
+
+function quotaLevel(remaining?: number): number | undefined {
+  if (remaining === undefined) {
+    return undefined;
+  }
+  if (remaining <= 0) {
+    return 0;
+  }
+  if (remaining <= 5) {
+    return 1;
+  }
+  if (remaining <= 20) {
+    return 2;
+  }
+  if (remaining <= 50) {
+    return 3;
+  }
+  return 4;
+}
+
+function candidateLevel(remaining5hValue?: number, remainingWeekValue?: number, blocked = false): number {
+  if (blocked) {
+    return 0;
+  }
+
+  const levels = [quotaLevel(remaining5hValue), quotaLevel(remainingWeekValue)].filter((value): value is number => value !== undefined);
+  if (levels.length === 0) {
+    return 3;
+  }
+
+  return Math.min(...levels);
+}
+
+function candidateScore(remaining5hValue?: number, remainingWeekValue?: number): number {
+  if (remaining5hValue !== undefined && remainingWeekValue !== undefined) {
+    return remaining5hValue * BALANCED_SCORE_5H_WEIGHT + remainingWeekValue * BALANCED_SCORE_WEEK_WEIGHT;
+  }
+  if (remaining5hValue !== undefined) {
+    return remaining5hValue;
+  }
+  if (remainingWeekValue !== undefined) {
+    return remainingWeekValue;
+  }
+  return -1;
 }
 
 function toCandidate(record: AccountRecord, now: number): AliasCandidate {
   const currentRemaining5h = remaining5h(record, now);
   const currentRemainingWeek = remainingWeek(record, now);
   const blocked = isBlocked(record, now);
-
-  let bucket = 2;
-  if (blocked) {
-    bucket = 0;
-  } else if (currentRemaining5h !== undefined && currentRemaining5h > 0) {
-    bucket = 3;
-  } else if (currentRemaining5h === undefined) {
-    bucket = 2;
-  } else {
-    bucket = 1;
-  }
+  const manualOnly = Boolean(record.meta.manualOnly);
+  const level = candidateLevel(currentRemaining5h, currentRemainingWeek, blocked);
 
   return {
     alias: record.meta.alias,
@@ -102,13 +148,18 @@ function toCandidate(record: AccountRecord, now: number): AliasCandidate {
     remaining5h: currentRemaining5h,
     remainingWeek: currentRemainingWeek,
     blocked,
-    bucket,
+    manualOnly,
+    bucket: manualOnly ? 0 : level > 0 ? 3 : 0,
+    level,
+    score: candidateScore(currentRemaining5h, currentRemainingWeek),
   };
 }
 
 function compareCandidates(left: AliasCandidate, right: AliasCandidate): number {
   return (
     right.bucket - left.bucket ||
+    right.level - left.level ||
+    right.score - left.score ||
     (right.remaining5h ?? -1) - (left.remaining5h ?? -1) ||
     (right.remainingWeek ?? -1) - (left.remainingWeek ?? -1) ||
     left.priority - right.priority ||
@@ -121,6 +172,7 @@ function bestAvailableCandidate(currentAlias: string | undefined, records: Accou
   const candidates = records
     .filter((record) => record.meta.alias && record.meta.alias !== currentAlias)
     .map((record) => toCandidate(record, now))
+    .filter((candidate) => !candidate.manualOnly)
     .sort(compareCandidates);
 
   return candidates.find((candidate) => candidate.bucket > 0);
@@ -146,12 +198,16 @@ export function pickNextAlias(
   options: {
     mode?: AutoSwitchMode;
     reason?: FailoverReason;
+    allowRebalance?: boolean;
   } = {},
 ): string | undefined {
   const mode = options.mode ?? "balanced";
-  const fallback = bestAvailableCandidate(currentAlias, records);
+  if (mode === "off") {
+    return undefined;
+  }
 
-  if (!currentAlias || (options.reason && shouldAutoSwitch(options.reason))) {
+  const fallback = bestAvailableCandidate(currentAlias, records);
+  if (!currentAlias) {
     return fallback?.alias;
   }
 
@@ -161,32 +217,45 @@ export function pickNextAlias(
   }
 
   const now = Date.now();
-  if (isBlocked(currentRecord, now)) {
-    return fallback?.alias;
-  }
-
-  if (mode === "sequential") {
+  const currentCandidate = toCandidate(currentRecord, now);
+  if (currentCandidate.manualOnly) {
     return undefined;
   }
 
-  const currentRemaining = remaining5h(currentRecord, now);
-  if (currentRemaining === undefined) {
+  if (options.reason && shouldAutoSwitch(options.reason)) {
+    return fallback?.alias;
+  }
+
+  if (currentCandidate.blocked) {
+    return fallback?.alias;
+  }
+
+  if (mode === "sequential" || options.allowRebalance === false) {
     return undefined;
   }
 
   const orderedCandidates = records
     .filter((record) => record.meta.alias && record.meta.alias !== currentAlias)
     .map((record) => toCandidate(record, now))
-    .filter((candidate) => !candidate.blocked && candidate.remaining5h !== undefined)
+    .filter((candidate) => !candidate.manualOnly && !candidate.blocked)
     .sort(compareCandidates);
+  const preferred = orderedCandidates[0];
+  if (!preferred || preferred.level <= currentCandidate.level) {
+    return undefined;
+  }
 
   for (const threshold of BALANCED_THRESHOLDS) {
-    if (currentRemaining > threshold) {
+    const currentCrossedThreshold =
+      (currentCandidate.remaining5h !== undefined && currentCandidate.remaining5h <= threshold) ||
+      (currentCandidate.remainingWeek !== undefined && currentCandidate.remainingWeek <= threshold);
+    if (!currentCrossedThreshold) {
       continue;
     }
 
-    const preferred = orderedCandidates.find((candidate) => (candidate.remaining5h ?? 0) > threshold);
-    if (preferred) {
+    const preferredAboveThreshold =
+      (preferred.remaining5h ?? -1) > threshold ||
+      (preferred.remainingWeek ?? -1) > threshold;
+    if (preferredAboveThreshold) {
       return preferred.alias;
     }
   }

@@ -1,7 +1,7 @@
 export type AuthMode = "chatgpt" | "api_key" | "unknown";
 export type ConfidenceLevel = "exact" | "estimated" | "manual";
 export type HealthState = "active" | "ready" | "cooldown" | "degraded" | "unknown";
-export type AutoSwitchMode = "balanced" | "sequential";
+export type AutoSwitchMode = "off" | "balanced" | "sequential";
 export type FailoverReason =
   | "quota-exhausted"
   | "rate-limited"
@@ -60,6 +60,7 @@ export interface AccountMeta {
   alias: string;
   displayName: string;
   priority: number;
+  manualOnly: boolean;
   notes?: string;
   email?: string;
   organization?: string;

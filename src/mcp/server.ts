@@ -30,7 +30,7 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
   const server = new Server(
     {
       name: "codex-keyring",
-      version: "0.4.0",
+      version: "0.5.0",
     },
     {
       capabilities: {
@@ -69,6 +69,7 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
           type: "object",
           properties: {
             alias: { type: "string" },
+            manualOnly: { type: "boolean" },
             priority: { type: "number" },
             notes: { type: "string" },
           },
@@ -103,17 +104,29 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
       },
       {
         name: "accounts.set_auto_mode",
-        description: "Enable or disable auto-switch mode and select the strategy.",
+        description: "Set the global auto-switch mode.",
         inputSchema: {
           type: "object",
           properties: {
             enabled: { type: "boolean" },
             mode: {
               type: "string",
-              enum: ["balanced", "sequential"],
+              enum: ["off", "balanced", "sequential"],
             },
           },
-          required: ["enabled"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "accounts.set_auto_participation",
+        description: "Include or exclude one alias from auto-switch.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            alias: { type: "string" },
+            enabled: { type: "boolean" },
+          },
+          required: ["alias", "enabled"],
           additionalProperties: false,
         },
       },
@@ -184,7 +197,10 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
       case "accounts.add": {
         const alias = normalizeAlias(String(args?.alias));
         const snapshot = await captureSnapshot(store.env.codexAuthPath, "active-auth");
-        const input: { priority?: number; notes?: string } = {};
+        const input: { manualOnly?: boolean; priority?: number; notes?: string } = {};
+        if (typeof args?.manualOnly === "boolean") {
+          input.manualOnly = args.manualOnly;
+        }
         if (typeof args?.priority === "number") {
           input.priority = args.priority;
         }
@@ -202,12 +218,24 @@ export async function startMcpServer(store: AccountStore): Promise<void> {
         return textResult({ ok: true });
       case "accounts.set_auto_mode": {
         const state = await store.getState();
-        state.autoSwitch = Boolean(args?.enabled);
-        if (args?.mode === "balanced" || args?.mode === "sequential") {
+        if (args?.mode === "off" || args?.mode === "balanced" || args?.mode === "sequential") {
           state.autoSwitchMode = args.mode;
+          state.autoSwitch = args.mode !== "off";
+        } else if (typeof args?.enabled === "boolean") {
+          state.autoSwitch = args.enabled;
+          state.autoSwitchMode = args.enabled
+            ? state.autoSwitchMode === "sequential"
+              ? "sequential"
+              : "balanced"
+            : "off";
         }
         await store.saveState(state);
         return textResult(state);
+      }
+      case "accounts.set_auto_participation": {
+        const alias = normalizeAlias(String(args?.alias));
+        const meta = await store.setManualOnly(alias, !Boolean(args?.enabled));
+        return textResult(meta);
       }
       case "accounts.status":
         return textResult(await getStatusView(store));
