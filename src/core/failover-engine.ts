@@ -34,6 +34,8 @@ const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
       /quota exhausted/i,
       /credits exhausted/i,
       /"x-codex-primary-used-percent":"100"/i,
+      /insufficient quota/i,
+      /insufficient_quota/i,
     ],
   },
   {
