@@ -1,6 +1,6 @@
 {
   "name": "codex-keyring",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Native multi-account manager for Codex with quota-aware switching, smooth failover, and plugin install support.",
   "type": "module",
   "packageManager": "npm@11.11.0",

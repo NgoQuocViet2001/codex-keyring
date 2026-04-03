@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4
+
+- Classify common Codex `403 Forbidden` workspace and organization policy failures as `workspace-mismatch` so supported failover can still trigger
+- Add regression coverage for plain-text and JSON-shaped `403` failure payloads
+
 ## 0.5.3
 
 - Republish the latest quota-aware switching and manual-only behavior with the refreshed English and Vietnamese guides so GitHub and npm stay aligned
