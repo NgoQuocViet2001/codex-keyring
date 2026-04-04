@@ -76,27 +76,32 @@ interface ReconciliationOptions {
   allowSwitch?: boolean;
 }
 
-async function maybeSwitchBlockedAlias(
+interface AutoSwitchEvaluation {
+  allowRebalance?: boolean;
+  reason?: FailoverReason;
+}
+
+async function maybeSwitchActiveAlias(
   store: AccountStore,
   state: Awaited<ReturnType<AccountStore["getState"]>>,
   allowSwitch: boolean,
-  reason?: FailoverReason,
+  records: AccountRecord[],
+  evaluation: AutoSwitchEvaluation = {},
 ): Promise<string | undefined> {
   if (!allowSwitch || !state.autoSwitch || !state.activeAlias) {
     return undefined;
   }
 
-  const refreshedRecords = await store.listAccounts();
-  const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
+  const nextAlias = pickNextAlias(state.activeAlias, records, {
     mode: state.autoSwitchMode,
-    reason,
-    allowRebalance: reason !== undefined,
+    reason: evaluation.reason,
+    allowRebalance: evaluation.allowRebalance,
   });
   if (!nextAlias) {
     return undefined;
   }
 
-  await switchActiveAlias(store, nextAlias, reason ?? "quota-rebalance");
+  await switchActiveAlias(store, nextAlias, evaluation.reason ?? "quota-rebalance");
   await refreshAllStats(store);
   return nextAlias;
 }
@@ -480,10 +485,44 @@ async function enrichAccountIdentityHints(
     return;
   }
 
-  await store.mergeMeta(alias, {
-    email: details.email,
-    planType: details.planType,
-  });
+  const current = await store.getMeta(alias);
+  const patch: {
+    email?: string;
+    planType?: string;
+  } = {};
+
+  if (!current.email && details.email) {
+    patch.email = details.email;
+  }
+
+  if (!current.planType && details.planType) {
+    patch.planType = details.planType;
+  }
+
+  if (!patch.email && !patch.planType) {
+    return;
+  }
+
+  await store.mergeMeta(alias, patch);
+}
+
+function canRebalanceFromLiveQuota(
+  state: Awaited<ReturnType<AccountStore["getState"]>>,
+  records: AccountRecord[],
+): boolean {
+  if (state.autoSwitchMode !== "balanced" || !state.activeAlias) {
+    return false;
+  }
+
+  const activeRecord = records.find((record) => record.meta.alias === state.activeAlias);
+  if (!activeRecord?.stats) {
+    return false;
+  }
+
+  return activeRecord.stats.confidence === "exact" && (
+    activeRecord.stats.limit5hRemainingPercent !== undefined ||
+    activeRecord.stats.limitWeekRemainingPercent !== undefined
+  );
 }
 
 export async function reconcileHostFailover(
@@ -511,7 +550,14 @@ export async function reconcileHostFailover(
 
   if (!sourceResult.available) {
     await refreshAllStats(store);
-    const switchedTo = await maybeSwitchBlockedAlias(store, state, allowSwitch);
+    const refreshedRecords = await store.listAccounts();
+    const switchedTo = await maybeSwitchActiveAlias(
+      store,
+      state,
+      allowSwitch,
+      refreshedRecords,
+      { allowRebalance: canRebalanceFromLiveQuota(state, refreshedRecords) },
+    );
     return {
       available: false,
       rowsScanned: 0,
@@ -602,8 +648,17 @@ export async function reconcileHostFailover(
   }
 
   await refreshAllStats(store);
-
-  const switchedTo = await maybeSwitchBlockedAlias(store, state, allowSwitch, latestActiveAliasReason);
+  const refreshedRecords = await store.listAccounts();
+  const switchedTo = await maybeSwitchActiveAlias(
+    store,
+    state,
+    allowSwitch,
+    refreshedRecords,
+    {
+      reason: latestActiveAliasReason,
+      allowRebalance: latestActiveAliasReason !== undefined || canRebalanceFromLiveQuota(state, refreshedRecords),
+    },
+  );
 
   return {
     available: true,

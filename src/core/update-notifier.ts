@@ -92,7 +92,14 @@ export function shouldCheckForUpdates(
     return false;
   }
 
-  if (args.includes("--json") || args.includes("mcp") || args.includes("--help") || args.includes("-h") || args.includes("--version") || args.includes("-V")) {
+  if (
+    args.includes("--json") ||
+    args.includes("mcp") ||
+    args.includes("--help") ||
+    args.includes("-h") ||
+    args.includes("--version") ||
+    args.includes("-V")
+  ) {
     return false;
   }
 
@@ -125,7 +132,7 @@ async function fetchLatestVersion(packageName: string, fetchImpl: FetchLike): Pr
     return undefined;
   }
 
-  const payload = await response.json() as { version?: unknown };
+  const payload = (await response.json()) as { version?: unknown };
   return typeof payload.version === "string" && payload.version.trim() ? payload.version.trim() : undefined;
 }
 

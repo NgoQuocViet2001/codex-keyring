@@ -140,46 +140,7 @@ describe("stats-engine", () => {
     expect(stats.quotaSource).toBe("codex-host-log");
   });
 
-  it("drops stale quota windows after their reset time has already passed", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
-    const env = createEnv(tempDir);
-    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
-
-    const store = new AccountStore(env);
-    await store.upsertAccount("account1", snapshot("acct-1"));
-
-    await store.appendEvent({
-      id: randomUUID(),
-      timestamp: "2026-04-03T01:00:00.000Z",
-      type: "quota-observed",
-      alias: "account1",
-      details: {
-        quotaSnapshot: {
-          capturedAt: "2026-04-03T01:00:00.000Z",
-          source: "codex-host-log",
-          primary: {
-            usedPercent: 100,
-            remainingPercent: 0,
-            windowMinutes: 300,
-            resetAt: "2026-04-03T02:00:00.000Z",
-          },
-          secondary: {
-            usedPercent: 70,
-            remainingPercent: 30,
-            windowMinutes: 10_080,
-            resetAt: "2026-04-03T02:00:00.000Z",
-          },
-        } satisfies QuotaSnapshot,
-      },
-    });
-
-    const stats = await refreshStatsForAlias(store, "account1");
-    expect(stats.limit5hRemainingPercent).toBeUndefined();
-    expect(stats.limitWeekRemainingPercent).toBeUndefined();
-    expect(stats.quotaObservedAt).toBeUndefined();
-  });
-
-  it("prefers a fresher active session quota snapshot over older host events", async () => {
+  it("prefers a fresher active session quota snapshot even when the session started before the last switch", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
     const env = createEnv(tempDir);
     await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
@@ -189,7 +150,7 @@ describe("stats-engine", () => {
 
     const state = await store.getState();
     state.activeAlias = "account1";
-    state.lastSwitchAt = "2026-04-04T00:00:00.000Z";
+    state.lastSwitchAt = "2026-04-04T00:50:00.000Z";
     await store.saveState(state);
 
     await store.appendEvent({
@@ -240,5 +201,46 @@ describe("stats-engine", () => {
     expect(stats.limit5hRemainingPercent).toBe(77);
     expect(stats.limitWeekRemainingPercent).toBe(88);
     expect(stats.quotaSource).toBe("codex-session-log");
+  });
+
+  it("drops stale quota windows after their reset time has already passed", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
+
+    const store = new AccountStore(env);
+    await store.upsertAccount("account1", snapshot("acct-1"));
+
+    await store.appendEvent({
+      id: randomUUID(),
+      timestamp: "2026-04-03T01:00:00.000Z",
+      type: "quota-observed",
+      alias: "account1",
+      details: {
+        quotaSnapshot: {
+          capturedAt: "2026-04-03T01:00:00.000Z",
+          source: "codex-host-log",
+          primary: {
+            usedPercent: 100,
+            remainingPercent: 0,
+            windowMinutes: 300,
+            resetAt: "2026-04-03T02:00:00.000Z",
+          },
+          secondary: {
+            usedPercent: 70,
+            remainingPercent: 30,
+            windowMinutes: 10_080,
+            resetAt: "2026-04-03T02:00:00.000Z",
+          },
+        } satisfies QuotaSnapshot,
+      },
+    });
+
+    const stats = await refreshStatsForAlias(store, "account1");
+    expect(stats.limit5hRemainingPercent).toBeUndefined();
+    expect(stats.limitWeekRemainingPercent).toBeUndefined();
+    expect(stats.quotaObservedAt).toBeUndefined();
+    expect(stats.confidence).toBe("estimated");
+    expect(stats.notes).toContain("waiting for a fresh Codex signal");
   });
 });

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- Keep exact 5-hour and weekly remaining quota fresh across manual account switches by reading `token_count` session events that happen after `lastSwitchAt`, even when the Codex session itself started earlier
+- Re-enable the documented `balanced` startup rebalance behavior when exact live quota telemetry shows the active alias has dropped below the configured threshold, while still keeping `sequential` conservative
+- Improve host-log alias attribution by refusing to pin explicit unknown emails onto the current active alias, preventing false limit-hit events and bad auto-switch decisions
+- Add CLI UX for existing aliases so commands like `switch`, `info`, `stats`, `remove`, and `rename` can resolve a unique prefix or fail clearly with an ambiguity message instead of surfacing raw `ENOENT`
+
 ## 0.6.0
 
 - Recover exact 5-hour and weekly headroom directly from live Codex session logs when the host SQLite log is missing or unreadable, so `status`, `list`, and `stats` stop showing stale `--` values for active sessions

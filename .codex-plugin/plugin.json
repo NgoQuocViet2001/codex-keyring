@@ -1,14 +1,14 @@
 {
   "name": "codex-keyring",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Native multi-account manager for Codex with quota-aware switching and smoother auto-switch failover.",
   "author": {
     "name": "NgoQuocViet2001",
     "email": "ngoquocviet2001@gmail.com",
-    "url": "https://github.com/NgoQuocViet2001/codex-keyring"
+    "url": "https://github.com/ngoquocviet2001/codex-keyring"
   },
-  "homepage": "https://github.com/NgoQuocViet2001/codex-keyring",
-  "repository": "https://github.com/NgoQuocViet2001/codex-keyring",
+  "homepage": "https://github.com/ngoquocviet2001/codex-keyring",
+  "repository": "https://github.com/ngoquocviet2001/codex-keyring",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -28,9 +28,9 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/NgoQuocViet2001/codex-keyring",
-    "privacyPolicyURL": "https://github.com/NgoQuocViet2001/codex-keyring/blob/main/README.md",
-    "termsOfServiceURL": "https://github.com/NgoQuocViet2001/codex-keyring/blob/main/README.md",
+    "websiteURL": "https://github.com/ngoquocviet2001/codex-keyring",
+    "privacyPolicyURL": "https://github.com/ngoquocviet2001/codex-keyring/blob/main/README.md",
+    "termsOfServiceURL": "https://github.com/ngoquocviet2001/codex-keyring/blob/main/README.md",
     "defaultPrompt": [
       "List all Codex accounts that are currently registered and show which alias is active.",
       "Switch the active Codex account to the alias I specify and explain the current account health."

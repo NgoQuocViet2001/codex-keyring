@@ -70,12 +70,14 @@ export function quotaSnapshotFromSessionRateLimits(rateLimits: unknown, captured
     return undefined;
   }
 
-  const planType = typeof (rateLimits as Record<string, unknown>).plan_type === "string"
-    ? (rateLimits as Record<string, unknown>).plan_type as string
-    : undefined;
-  const activeLimit = typeof (rateLimits as Record<string, unknown>).limit_id === "string"
-    ? (rateLimits as Record<string, unknown>).limit_id as string
-    : undefined;
+  const planType =
+    typeof (rateLimits as Record<string, unknown>).plan_type === "string"
+      ? ((rateLimits as Record<string, unknown>).plan_type as string)
+      : undefined;
+  const activeLimit =
+    typeof (rateLimits as Record<string, unknown>).limit_id === "string"
+      ? ((rateLimits as Record<string, unknown>).limit_id as string)
+      : undefined;
 
   return {
     capturedAt,
@@ -188,6 +190,7 @@ function extractLatestQuotaObservation(
   tail: string,
   filePath: string,
   sessionStartedAt?: string,
+  sinceMs?: number,
 ): SessionQuotaObservation | undefined {
   const lines = tail.split(/\r?\n/u).filter(Boolean).reverse();
 
@@ -207,6 +210,11 @@ function extractLatestQuotaObservation(
 
       const capturedAt = parsed.timestamp;
       if (!capturedAt || Number.isNaN(Date.parse(capturedAt))) {
+        continue;
+      }
+
+      const capturedAtMs = Date.parse(capturedAt);
+      if (!Number.isNaN(sinceMs ?? Number.NaN) && capturedAtMs < (sinceMs as number)) {
         continue;
       }
 
@@ -240,9 +248,7 @@ export async function findLatestSessionQuotaObservation(
     return undefined;
   }
 
-  const sinceMs = options.since
-    ? Date.parse(options.since)
-    : Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60 * 1_000;
+  const sinceMs = options.since ? Date.parse(options.since) : Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60 * 1_000;
   const recentFiles: SessionFileCandidate[] = [];
   await collectSessionFiles(sessionsRoot, recentFiles);
 
@@ -256,15 +262,13 @@ export async function findLatestSessionQuotaObservation(
   for (const entry of candidates) {
     const head = await readFileHead(entry.filePath, SESSION_META_HEAD_BYTES);
     const sessionStartedAt = parseSessionStartedAt(head);
-    if (!Number.isNaN(sinceMs) && sessionStartedAt) {
-      const startedAtMs = Date.parse(sessionStartedAt);
-      if (!Number.isNaN(startedAtMs) && startedAtMs < sinceMs) {
-        continue;
-      }
-    }
-
     const tail = await readFileTail(entry.filePath, MAX_SESSION_TAIL_BYTES);
-    const observation = extractLatestQuotaObservation(tail, entry.filePath, sessionStartedAt);
+    const observation = extractLatestQuotaObservation(
+      tail,
+      entry.filePath,
+      sessionStartedAt,
+      Number.isNaN(sinceMs) ? undefined : sinceMs,
+    );
     if (!observation) {
       continue;
     }
