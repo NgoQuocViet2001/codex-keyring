@@ -1,15 +1,26 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { compareVersions, maybePromptForUpdate, shouldCheckForUpdates } from "../src/core/update-notifier.js";
 
 let tempDir: string | undefined;
+let originalCi: string | undefined;
+
+beforeEach(() => {
+  originalCi = process.env.CI;
+  delete process.env.CI;
+});
 
 afterEach(async () => {
   if (tempDir) {
     await rm(tempDir, { recursive: true, force: true });
     tempDir = undefined;
+  }
+  if (originalCi === undefined) {
+    delete process.env.CI;
+  } else {
+    process.env.CI = originalCi;
   }
   vi.restoreAllMocks();
 });
