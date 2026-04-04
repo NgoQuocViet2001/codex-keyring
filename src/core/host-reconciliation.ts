@@ -76,6 +76,31 @@ interface ReconciliationOptions {
   allowSwitch?: boolean;
 }
 
+async function maybeSwitchBlockedAlias(
+  store: AccountStore,
+  state: Awaited<ReturnType<AccountStore["getState"]>>,
+  allowSwitch: boolean,
+  reason?: FailoverReason,
+): Promise<string | undefined> {
+  if (!allowSwitch || !state.autoSwitch || !state.activeAlias) {
+    return undefined;
+  }
+
+  const refreshedRecords = await store.listAccounts();
+  const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
+    mode: state.autoSwitchMode,
+    reason,
+    allowRebalance: reason !== undefined,
+  });
+  if (!nextAlias) {
+    return undefined;
+  }
+
+  await switchActiveAlias(store, nextAlias, reason ?? "quota-rebalance");
+  await refreshAllStats(store);
+  return nextAlias;
+}
+
 function normalizeEmail(value?: string): string | undefined {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : undefined;
@@ -368,14 +393,18 @@ function buildParsedRows(
 
   for (const row of parsedRows) {
     row.contextEmail = row.directEmail ?? findNearestContextEmail(row, parsedRows);
+    const aliasForContextEmail = aliasFromEmail(row.contextEmail, records);
     row.resolvedAlias =
-      aliasFromEmail(row.contextEmail, records) ??
-      activeAliasAtTimestamp(row.ts * 1_000) ??
-      (row.contextEmail ? undefined : allowSingleAliasFallback);
+      aliasForContextEmail ??
+      (row.contextEmail ? undefined : activeAliasAtTimestamp(row.ts * 1_000) ?? allowSingleAliasFallback);
   }
 
   for (const row of parsedRows) {
     if (row.resolvedAlias) {
+      continue;
+    }
+
+    if (row.contextEmail) {
       continue;
     }
 
@@ -481,10 +510,13 @@ export async function reconcileHostFailover(
     : await readHostLogRowsFromSqlite(store);
 
   if (!sourceResult.available) {
+    await refreshAllStats(store);
+    const switchedTo = await maybeSwitchBlockedAlias(store, state, allowSwitch);
     return {
       available: false,
       rowsScanned: 0,
       appendedEvents: 0,
+      switchedTo,
       reason: sourceResult.reason,
     };
   }
@@ -571,20 +603,7 @@ export async function reconcileHostFailover(
 
   await refreshAllStats(store);
 
-  let switchedTo: string | undefined;
-  if (allowSwitch && state.autoSwitch && state.activeAlias) {
-    const refreshedRecords = await store.listAccounts();
-    const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
-      mode: state.autoSwitchMode,
-      reason: latestActiveAliasReason,
-      allowRebalance: latestActiveAliasReason !== undefined,
-    });
-    if (nextAlias) {
-      await switchActiveAlias(store, nextAlias, latestActiveAliasReason ?? "quota-rebalance");
-      await refreshAllStats(store);
-      switchedTo = nextAlias;
-    }
-  }
+  const switchedTo = await maybeSwitchBlockedAlias(store, state, allowSwitch, latestActiveAliasReason);
 
   return {
     available: true,

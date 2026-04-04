@@ -1,6 +1,6 @@
 {
   "name": "codex-keyring",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "Native multi-account manager for Codex with quota-aware switching, smooth failover, and plugin install support.",
   "type": "module",
   "packageManager": "npm@11.11.0",
@@ -53,10 +53,10 @@
   ],
   "author": "NgoQuocViet2001 <ngoquocviet2001@gmail.com>",
   "license": "MIT",
-  "homepage": "https://github.com/ngoquocviet2001/codex-keyring",
+  "homepage": "https://github.com/NgoQuocViet2001/codex-keyring",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ngoquocviet2001/codex-keyring.git"
+    "url": "git+https://github.com/NgoQuocViet2001/codex-keyring.git"
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",

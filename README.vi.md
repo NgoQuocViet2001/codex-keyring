@@ -25,8 +25,6 @@ codex-keyring doctor
 
 `codex-keyring install` thiết lập managed mode, cài plugin payload local cho Codex, và cập nhật personal plugin marketplace.
 
-Nếu bạn đang nâng cấp từ `codex-accounts`, chỉ cần cài `codex-keyring` rồi chạy `codex-keyring install` một lần. Dữ liệu cũ trong `~/.codex-accounts` sẽ được migrate sang `~/.codex-keyring`, đồng thời personal marketplace entry cũng được chuẩn hóa sang plugin slug mới.
-
 ### Sau khi `install`
 
 Sau khi cài xong, `Codex Keyring` sẽ khả dụng dưới dạng plugin trong Codex app và Codex IDE extension.
@@ -49,6 +47,12 @@ codex-keyring status
 `account1` và `account2` chỉ là alias mẫu. Hãy thay bằng tên phản ánh đúng account bạn muốn quản lý, ví dụ `alice-work`, `alice-personal`, hoặc `ngoquocviet2001`.
 
 Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra account, switch tay, hoặc chuẩn bị cho auto-switch theo quota. View CLI mặc định giờ ưu tiên `5h left` và `week left` khi Codex đã lộ dữ liệu quota local chính xác.
+
+## Mẹo cập nhật
+
+Khi npm đã có bản mới hơn, các lệnh `codex-keyring` chạy ở chế độ interactive giờ sẽ hiện một prompt gọn để người dùng chọn `Update now` hoặc `Skip this version`.
+
+Các luồng máy-đọc như `--json`, `--help`, `--version`, và `codex-keyring mcp` sẽ không bị chèn prompt để tránh làm bẩn script hoặc stdio của MCP.
 
 ## Sử dụng trong Codex App và IDE
 

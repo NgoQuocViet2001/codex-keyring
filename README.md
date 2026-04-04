@@ -25,8 +25,6 @@ codex-keyring doctor
 
 `codex-keyring install` sets up managed mode, installs the local plugin payload for Codex, and updates the personal plugin marketplace.
 
-If you are upgrading from `codex-accounts`, install `codex-keyring` and run `codex-keyring install` once. Existing data under `~/.codex-accounts` is migrated to `~/.codex-keyring`, and the personal marketplace entry is normalized to the new plugin slug.
-
 ### After `install`
 
 After installation, `Codex Keyring` is available as a plugin inside Codex app and the Codex IDE extension.
@@ -49,6 +47,12 @@ codex-keyring status
 `account1` and `account2` are example aliases. Replace them with names that match the accounts you want to manage, such as `alice-work`, `alice-personal`, or `ngoquocviet2001`.
 
 This captures the current Codex login as `account1`, signs into another account as `account2`, then lets you inspect accounts, switch manually, or prepare for quota-aware auto-switch failover. The default CLI view now highlights `5h left` and `week left` when Codex has exposed exact local quota data.
+
+## Update Tip
+
+When a newer npm release is available, interactive `codex-keyring` commands now show a lightweight prompt so the user can choose `Update now` or `Skip this version`.
+
+Machine-readable flows such as `--json`, `--help`, `--version`, and `codex-keyring mcp` stay quiet so scripts and MCP stdio are not polluted.
 
 ## Use In Codex App And IDE
 

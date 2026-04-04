@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Recover exact 5-hour and weekly headroom directly from live Codex session logs when the host SQLite log is missing or unreadable, so `status`, `list`, and `stats` stop showing stale `--` values for active sessions
+- Prevent host-side quota and limit-hit rows from being attached to the wrong alias when the log includes an explicit email that does not map to a managed account, which keeps auto-switch decisions accurate after the app hits quota
+- Keep startup reconciliation useful even when Codex host logs are unavailable by still refreshing stats and auto-switching away from a blocked active alias when fresh session quota data proves it is exhausted
+- Add an interactive update notifier for newer npm releases, with `Update now` or `Skip this version`, while keeping `--json`, help/version flows, and `mcp` output quiet
+- Refresh both English and Vietnamese READMEs to remove stale legacy naming and document the new update prompt behavior
+
 ## 0.5.5
 
 - Classify OpenAI `insufficient quota` and `insufficient_quota` failures as `quota-exhausted` so supported auto-switch failover still triggers for that quota error family

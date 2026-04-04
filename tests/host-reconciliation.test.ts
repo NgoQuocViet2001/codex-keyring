@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -222,5 +222,101 @@ describe("host-reconciliation", () => {
     const result = await reconcileHostFailover(store, { rows: quotaOnlyRows() });
     expect(result.switchedTo).toBeUndefined();
     expect((await store.getState()).activeAlias).toBe("account1");
+  });
+
+  it("does not attach an explicit unknown email to the currently active alias", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
+
+    const store = new AccountStore(env);
+    await store.upsertAccount("account1", snapshot("acct-1", "alice@example.com"));
+
+    const state = await store.getState();
+    state.activeAlias = "account1";
+    state.managedAuthMode = true;
+    await store.saveState(state);
+
+    const result = await reconcileHostFailover(store, {
+      rows: [
+        {
+          id: 301,
+          ts: 1_775_200_100,
+          threadId: "thread-unknown",
+          processUuid: "process-unknown",
+          body: 'session metadata user.email="charlie@example.com"',
+        },
+        {
+          id: 302,
+          ts: 1_775_200_101,
+          threadId: "thread-unknown",
+          processUuid: "process-unknown",
+          body: 'error {"type":"usage_limit_reached","status_code":429,"message":"You\'ve hit your usage limit."}',
+        },
+      ],
+    });
+
+    expect(result.appendedEvents).toBe(0);
+    expect(await store.listEvents("account1", 20)).toHaveLength(1);
+  });
+
+  it("still auto-switches from a blocked active alias when the host sqlite log is unavailable", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
+
+    const store = new AccountStore(env);
+    await store.upsertAccount("account1", snapshot("acct-1", "alice@example.com"));
+    await store.upsertAccount("account2", snapshot("acct-2", "bob@example.com"));
+
+    const state = await store.getState();
+    state.activeAlias = "account1";
+    state.autoSwitch = true;
+    state.autoSwitchMode = "sequential";
+    state.managedAuthMode = true;
+    state.lastSwitchAt = "2026-04-04T00:00:00.000Z";
+    await store.saveState(state);
+
+    const sessionFile = path.join(env.codexHome, "sessions", "2026", "04", "04", "session-1.jsonl");
+    await mkdir(path.dirname(sessionFile), { recursive: true });
+    await writeFile(
+      sessionFile,
+      [
+        JSON.stringify({
+          type: "session_meta",
+          timestamp: "2026-04-04T00:05:00.000Z",
+          payload: { timestamp: "2026-04-04T00:05:00.000Z" },
+        }),
+        JSON.stringify({
+          type: "event_msg",
+          timestamp: "2026-04-04T00:20:00.000Z",
+          payload: {
+            type: "token_count",
+            rate_limits: {
+              plan_type: "team",
+              primary: {
+                used_percent: 100,
+                window_minutes: 300,
+                resets_at: Date.parse("2999-01-01T00:00:00.000Z") / 1_000,
+              },
+              secondary: {
+                used_percent: 15,
+                window_minutes: 10_080,
+                resets_at: Date.parse("2999-01-08T00:00:00.000Z") / 1_000,
+              },
+            },
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await reconcileHostFailover(store);
+    expect(result).toMatchObject({
+      available: false,
+      switchedTo: "account2",
+      reason: "codex-host-log-missing",
+    });
+    expect((await store.getState()).activeAlias).toBe("account2");
   });
 });

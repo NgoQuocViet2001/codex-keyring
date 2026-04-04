@@ -49,7 +49,7 @@ export interface QuotaWindowSnapshot {
 
 export interface QuotaSnapshot {
   capturedAt: string;
-  source: "codex-host-log" | "exec-output";
+  source: "codex-host-log" | "codex-session-log" | "exec-output";
   activeLimit?: string;
   planType?: string;
   primary?: QuotaWindowSnapshot;
