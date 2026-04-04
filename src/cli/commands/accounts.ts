@@ -53,6 +53,25 @@ function formatSwitchingMode(manualOnly: boolean): string {
   return manualOnly ? "manual-only" : "auto";
 }
 
+async function resolveExistingAlias(context: CliContext, alias: string): Promise<string> {
+  const normalizedAlias = normalizeAlias(alias);
+  const aliases = await context.store.listAliases();
+  if (aliases.includes(normalizedAlias)) {
+    return normalizedAlias;
+  }
+
+  const prefixMatches = aliases.filter((candidate) => candidate.startsWith(normalizedAlias));
+  if (prefixMatches.length === 1) {
+    return prefixMatches[0]!;
+  }
+
+  if (prefixMatches.length > 1) {
+    throw new Error(`Alias \`${normalizedAlias}\` is ambiguous. Matches: ${prefixMatches.join(", ")}`);
+  }
+
+  throw new Error(`Unknown alias \`${normalizedAlias}\`. Run \`codex-keyring list\` to see registered aliases.`);
+}
+
 function printManualOnlyAutoSwitchNotice(): void {
   console.log("Auto-switch mode was turned off because the active alias is manual-only.");
   console.log("If you later switch to an alias that supports auto-switch, run `codex-keyring auto sequential` or `codex-keyring auto balanced` to turn it back on.");
@@ -116,6 +135,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
           }
           row.active = record.active;
           row.health = record.health;
+          row.confidence = record.confidence;
           if (showSwitching) {
             row.switching = formatSwitchingMode(record.manualOnly);
           }
@@ -149,6 +169,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
           planType: alias.planType ?? "",
           active: alias.active,
           health: alias.health,
+          confidence: alias.confidence,
           ...(showSwitching ? { switching: formatSwitchingMode(alias.manualOnly) } : {}),
           "5h left": formatRemainingPercent(alias.limit5hRemainingPercent),
           "week left": formatRemainingPercent(alias.limitWeekRemainingPercent),
@@ -169,7 +190,8 @@ export function registerAccountCommands(program: Command, context: CliContext): 
       }
 
       if (alias) {
-        const stats = await refreshStatsForAlias(context.store, normalizeAlias(alias));
+        const resolvedAlias = await resolveExistingAlias(context, alias);
+        const stats = await refreshStatsForAlias(context.store, resolvedAlias);
         if (options.json) {
           printJson(stats);
           return;
@@ -214,7 +236,8 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("<alias>", "Alias to inspect")
     .option("--json", "Emit JSON output")
     .action(async (alias: string, options: { json?: boolean }) => {
-      const payload = await getAccountInfoView(context.store, normalizeAlias(alias));
+      const resolvedAlias = await resolveExistingAlias(context, alias);
+      const payload = await getAccountInfoView(context.store, resolvedAlias);
       if (options.json) {
         printJson(payload);
         return;
@@ -245,7 +268,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("<alias>", "Alias to update")
     .argument("<mode>", "on or off")
     .action(async (alias: string, mode: string) => {
-      const normalizedAlias = normalizeAlias(alias);
+      const normalizedAlias = await resolveExistingAlias(context, alias);
       const normalizedMode = mode.trim().toLowerCase();
       if (normalizedMode !== "on" && normalizedMode !== "off") {
         throw new Error("Mode must be `on` or `off`.");
@@ -321,7 +344,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .description("Switch the active Codex auth cache to a registered alias")
     .argument("<alias>", "Alias to activate")
     .action(async (alias: string) => {
-      const normalizedAlias = normalizeAlias(alias);
+      const normalizedAlias = await resolveExistingAlias(context, alias);
       const result = await switchActiveAlias(context.store, normalizedAlias, "manual");
       await refreshStatsForAlias(context.store, normalizedAlias);
       console.log(`Active Codex account switched to ${normalizedAlias}.`);
@@ -337,7 +360,7 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("<alias>", "Alias to remove")
     .option("--force", "Allow removal of the active alias")
     .action(async (alias: string, options: { force?: boolean }) => {
-      const normalizedAlias = normalizeAlias(alias);
+      const normalizedAlias = await resolveExistingAlias(context, alias);
       const state = await context.store.getState();
       if (state.activeAlias === normalizedAlias && !options.force) {
         throw new Error("Refusing to remove the active alias without --force.");
@@ -358,8 +381,9 @@ export function registerAccountCommands(program: Command, context: CliContext): 
     .argument("<currentAlias>", "Existing alias")
     .argument("<nextAlias>", "New alias")
     .action(async (currentAlias: string, nextAlias: string) => {
-      await context.store.renameAccount(currentAlias, nextAlias);
-      console.log(`Renamed ${normalizeAlias(currentAlias)} to ${normalizeAlias(nextAlias)}.`);
+      const resolvedAlias = await resolveExistingAlias(context, currentAlias);
+      await context.store.renameAccount(resolvedAlias, nextAlias);
+      console.log(`Renamed ${resolvedAlias} to ${normalizeAlias(nextAlias)}.`);
     });
 
   program

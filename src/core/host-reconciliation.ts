@@ -76,6 +76,36 @@ interface ReconciliationOptions {
   allowSwitch?: boolean;
 }
 
+interface AutoSwitchEvaluation {
+  allowRebalance?: boolean;
+  reason?: FailoverReason;
+}
+
+async function maybeSwitchActiveAlias(
+  store: AccountStore,
+  state: Awaited<ReturnType<AccountStore["getState"]>>,
+  allowSwitch: boolean,
+  records: AccountRecord[],
+  evaluation: AutoSwitchEvaluation = {},
+): Promise<string | undefined> {
+  if (!allowSwitch || !state.autoSwitch || !state.activeAlias) {
+    return undefined;
+  }
+
+  const nextAlias = pickNextAlias(state.activeAlias, records, {
+    mode: state.autoSwitchMode,
+    reason: evaluation.reason,
+    allowRebalance: evaluation.allowRebalance,
+  });
+  if (!nextAlias) {
+    return undefined;
+  }
+
+  await switchActiveAlias(store, nextAlias, evaluation.reason ?? "quota-rebalance");
+  await refreshAllStats(store);
+  return nextAlias;
+}
+
 function normalizeEmail(value?: string): string | undefined {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : undefined;
@@ -368,14 +398,18 @@ function buildParsedRows(
 
   for (const row of parsedRows) {
     row.contextEmail = row.directEmail ?? findNearestContextEmail(row, parsedRows);
+    const aliasForContextEmail = aliasFromEmail(row.contextEmail, records);
     row.resolvedAlias =
-      aliasFromEmail(row.contextEmail, records) ??
-      activeAliasAtTimestamp(row.ts * 1_000) ??
-      (row.contextEmail ? undefined : allowSingleAliasFallback);
+      aliasForContextEmail ??
+      (row.contextEmail ? undefined : activeAliasAtTimestamp(row.ts * 1_000) ?? allowSingleAliasFallback);
   }
 
   for (const row of parsedRows) {
     if (row.resolvedAlias) {
+      continue;
+    }
+
+    if (row.contextEmail) {
       continue;
     }
 
@@ -451,10 +485,44 @@ async function enrichAccountIdentityHints(
     return;
   }
 
-  await store.mergeMeta(alias, {
-    email: details.email,
-    planType: details.planType,
-  });
+  const current = await store.getMeta(alias);
+  const patch: {
+    email?: string;
+    planType?: string;
+  } = {};
+
+  if (!current.email && details.email) {
+    patch.email = details.email;
+  }
+
+  if (!current.planType && details.planType) {
+    patch.planType = details.planType;
+  }
+
+  if (!patch.email && !patch.planType) {
+    return;
+  }
+
+  await store.mergeMeta(alias, patch);
+}
+
+function canRebalanceFromLiveQuota(
+  state: Awaited<ReturnType<AccountStore["getState"]>>,
+  records: AccountRecord[],
+): boolean {
+  if (state.autoSwitchMode !== "balanced" || !state.activeAlias) {
+    return false;
+  }
+
+  const activeRecord = records.find((record) => record.meta.alias === state.activeAlias);
+  if (!activeRecord?.stats) {
+    return false;
+  }
+
+  return activeRecord.stats.confidence === "exact" && (
+    activeRecord.stats.limit5hRemainingPercent !== undefined ||
+    activeRecord.stats.limitWeekRemainingPercent !== undefined
+  );
 }
 
 export async function reconcileHostFailover(
@@ -481,10 +549,20 @@ export async function reconcileHostFailover(
     : await readHostLogRowsFromSqlite(store);
 
   if (!sourceResult.available) {
+    await refreshAllStats(store);
+    const refreshedRecords = await store.listAccounts();
+    const switchedTo = await maybeSwitchActiveAlias(
+      store,
+      state,
+      allowSwitch,
+      refreshedRecords,
+      { allowRebalance: canRebalanceFromLiveQuota(state, refreshedRecords) },
+    );
     return {
       available: false,
       rowsScanned: 0,
       appendedEvents: 0,
+      switchedTo,
       reason: sourceResult.reason,
     };
   }
@@ -570,21 +648,17 @@ export async function reconcileHostFailover(
   }
 
   await refreshAllStats(store);
-
-  let switchedTo: string | undefined;
-  if (allowSwitch && state.autoSwitch && state.activeAlias) {
-    const refreshedRecords = await store.listAccounts();
-    const nextAlias = pickNextAlias(state.activeAlias, refreshedRecords, {
-      mode: state.autoSwitchMode,
+  const refreshedRecords = await store.listAccounts();
+  const switchedTo = await maybeSwitchActiveAlias(
+    store,
+    state,
+    allowSwitch,
+    refreshedRecords,
+    {
       reason: latestActiveAliasReason,
-      allowRebalance: latestActiveAliasReason !== undefined,
-    });
-    if (nextAlias) {
-      await switchActiveAlias(store, nextAlias, latestActiveAliasReason ?? "quota-rebalance");
-      await refreshAllStats(store);
-      switchedTo = nextAlias;
-    }
-  }
+      allowRebalance: latestActiveAliasReason !== undefined || canRebalanceFromLiveQuota(state, refreshedRecords),
+    },
+  );
 
   return {
     available: true,

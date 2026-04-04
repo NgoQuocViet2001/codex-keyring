@@ -25,7 +25,7 @@ export interface PublicAccountView {
   cooldownUntil?: string;
   lastRefresh?: string;
   quotaObservedAt?: string;
-  quotaSource?: "codex-host-log" | "exec-output";
+  quotaSource?: "codex-host-log" | "codex-session-log" | "exec-output";
   limit5hUsedPercent?: number;
   limit5hRemainingPercent?: number;
   limit5hResetAt?: string;
@@ -106,7 +106,7 @@ function toPublicAccountView(record: {
     cooldownUntil?: string;
     lastRefresh?: string;
     quotaObservedAt?: string;
-    quotaSource?: "codex-host-log" | "exec-output";
+    quotaSource?: "codex-host-log" | "codex-session-log" | "exec-output";
     limit5hUsedPercent?: number;
     limit5hRemainingPercent?: number;
     limit5hResetAt?: string;

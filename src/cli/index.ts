@@ -1,16 +1,30 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import packageJson from "../../package.json" with { type: "json" };
+import { maybePromptForUpdate } from "../core/update-notifier.js";
 import { startMcpServer } from "../mcp/server.js";
 import { registerAccountCommands } from "./commands/accounts.js";
 import { registerExecCommand } from "./commands/exec.js";
 import { registerInstallCommands } from "./commands/install.js";
 import { createCliContext } from "./context.js";
 
+class AbortAfterSelfUpdateError extends Error {}
+
 async function main(): Promise<void> {
   const context = await createCliContext();
   const program = new Command();
   program.name("codex-keyring").description("Native multi-account manager for Codex").version(packageJson.version);
+
+  program.hook("preAction", async () => {
+    const result = await maybePromptForUpdate({
+      packageName: packageJson.name,
+      currentVersion: packageJson.version,
+      storeRoot: context.store.env.codexKeyringHome,
+    });
+    if (result.status === "updated") {
+      throw new AbortAfterSelfUpdateError();
+    }
+  });
 
   registerAccountCommands(program, context);
   registerInstallCommands(program, context);
@@ -27,6 +41,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof AbortAfterSelfUpdateError) {
+    return;
+  }
   const message = error instanceof Error ? error.message : String(error);
   console.error(`codex-keyring: ${message}`);
   process.exitCode = 1;

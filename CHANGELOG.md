@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.1
+
+- Keep exact 5-hour and weekly remaining quota fresh across manual account switches by reading `token_count` session events that happen after `lastSwitchAt`, even when the Codex session itself started earlier
+- Re-enable the documented `balanced` startup rebalance behavior when exact live quota telemetry shows the active alias has dropped below the configured threshold, while still keeping `sequential` conservative
+- Improve host-log alias attribution by refusing to pin explicit unknown emails onto the current active alias, preventing false limit-hit events and bad auto-switch decisions
+- Add CLI UX for existing aliases so commands like `switch`, `info`, `stats`, `remove`, and `rename` can resolve a unique prefix or fail clearly with an ambiguity message instead of surfacing raw `ENOENT`
+
+## 0.6.0
+
+- Recover exact 5-hour and weekly headroom directly from live Codex session logs when the host SQLite log is missing or unreadable, so `status`, `list`, and `stats` stop showing stale `--` values for active sessions
+- Prevent host-side quota and limit-hit rows from being attached to the wrong alias when the log includes an explicit email that does not map to a managed account, which keeps auto-switch decisions accurate after the app hits quota
+- Keep startup reconciliation useful even when Codex host logs are unavailable by still refreshing stats and auto-switching away from a blocked active alias when fresh session quota data proves it is exhausted
+- Add an interactive update notifier for newer npm releases, with `Update now` or `Skip this version`, while keeping `--json`, help/version flows, and `mcp` output quiet
+- Refresh both English and Vietnamese READMEs to remove stale legacy naming and document the new update prompt behavior
+
+## 0.5.5
+
+- Classify OpenAI `insufficient quota` and `insufficient_quota` failures as `quota-exhausted` so supported auto-switch failover still triggers for that quota error family
+- Keep the classifier narrow enough to avoid treating generic quota discussion text as a real failover signal
+
 ## 0.5.4
 
 - Classify common Codex `403 Forbidden` workspace and organization policy failures as `workspace-mismatch` so supported failover can still trigger

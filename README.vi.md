@@ -48,7 +48,13 @@ codex-keyring status
 
 `account1` và `account2` chỉ là alias mẫu. Hãy thay bằng tên phản ánh đúng account bạn muốn quản lý, ví dụ `alice-work`, `alice-personal`, hoặc `ngoquocviet2001`.
 
-Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra account, switch tay, hoặc chuẩn bị cho auto-switch theo quota. View CLI mặc định giờ ưu tiên `5h left` và `week left` khi Codex đã lộ dữ liệu quota local chính xác.
+Luồng này lưu login Codex hiện tại thành `account1`, đăng nhập thêm một account khác thành `account2`, rồi cho phép bạn kiểm tra account, switch tay, hoặc chuẩn bị cho auto-switch theo quota. View CLI mặc định giờ ưu tiên `5h left` và `week left` khi Codex đã lộ dữ liệu quota local chính xác, kể cả trường hợp phải khôi phục từ session log của alias đang active vì host SQLite log bị thiếu hoặc không đọc được.
+
+## Mẹo cập nhật
+
+Khi npm đã có bản mới hơn, các lệnh `codex-keyring` chạy ở chế độ interactive sẽ hiện một prompt gọn để bạn chọn `Update now` hoặc `Skip this version`.
+
+Các luồng máy-đọc như `--json`, `--help`, `--version`, và `codex-keyring mcp` sẽ không bị chèn prompt để tránh làm bẩn script hoặc stdio của MCP.
 
 ## Sử dụng trong Codex App và IDE
 
@@ -107,6 +113,8 @@ codex-keyring stats
 codex-keyring stats account2
 ```
 
+Nếu một quota window 5 giờ hoặc 1 tuần đã đi qua mốc `resetAt` nhưng Codex chưa phát ra host signal mới hơn, `codex-keyring` giờ sẽ hiện `--` cho window đó thay vì tiếp tục dùng số quota cũ như thể vẫn còn chính xác. Hãy xem cột `confidence` hoặc chạy `codex-keyring stats <alias>` khi cần lời giải thích đầy đủ hơn.
+
 ### Switch Account Thủ Công
 
 ```bash
@@ -131,7 +139,7 @@ Nếu bạn muốn hành vi ổn định và dễ đoán nhất để dùng hằ
 
 `codex-keyring exec` giờ có thể switch active auth cache ngay khi phiên CLI đang chạy phát ra lỗi quota hoặc auth được hỗ trợ. Nếu process vẫn thoát ra, nó sẽ retry đúng một tiến trình mới sau khi failover.
 
-Với Codex app và IDE extension, `codex-keyring` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
+Với Codex app và IDE extension, `codex-keyring` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Ở mode `balanced`, bước reconciliation này giờ cũng có thể rebalance chủ động khi exact live quota cho thấy alias đang active đã tụt xuống dưới ngưỡng chuyển. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
 
 ### Giữ Một Alias Chỉ Switch Tay
 
@@ -167,8 +175,8 @@ Nếu xóa alias đang active, cần thêm `--force`.
 
 | Lệnh | Mục đích | Ghi chú |
 | --- | --- | --- |
-| `codex-keyring list` | liệt kê alias và health | bảng mặc định ưu tiên `5h left` và `week left`; hỗ trợ `--json` |
-| `codex-keyring status` | xem active alias và managed mode | gồm auto-switch mode và quota summary; hỗ trợ `--json` |
+| `codex-keyring list` | liệt kê alias và health | bảng mặc định ưu tiên `confidence`, `5h left` và `week left`; hỗ trợ `--json` |
+| `codex-keyring status` | xem active alias và managed mode | gồm auto-switch mode cùng `confidence` và quota summary; hỗ trợ `--json` |
 | `codex-keyring info <alias>` | xem chi tiết an toàn của một alias | gồm email, organization và plan details nếu có |
 | `codex-keyring stats [alias]` | xem stats ưu tiên quota cho một hoặc tất cả alias | gồm quota 5 giờ và 1 tuần khi đã biết; hỗ trợ `--json` |
 | `codex-keyring add <alias>` | thêm alias qua official login | mặc định là browser OAuth |
@@ -185,6 +193,29 @@ Nếu xóa alias đang active, cần thêm `--force`.
 | `codex-keyring uninstall` | gỡ plugin khỏi marketplace | dữ liệu store vẫn còn |
 | `codex-keyring doctor` | kiểm tra tình trạng môi trường | nên chạy sau khi install |
 | `codex-keyring mcp` | chạy stdio MCP server | dùng cho tích hợp nâng cao |
+
+## CI/CD và Release
+
+Repo giờ có hai lớp automation:
+
+- `.github/workflows/ci.yml` chạy `build`, `test`, `release:check`, `npm pack`, smoke test cài `.tgz` global, `codex-keyring install`, và `codex-keyring doctor` trên cả Ubuntu lẫn Windows.
+- `.github/workflows/release.yml` tự publish package lên npm khi bạn push tag như `vX.Y.Z`, dùng npm trusted publishing qua GitHub Actions OIDC.
+- `prepack` và `prepublishOnly` đều chạy `npm run release:verify`, nên `npm pack` và `npm publish` local không thể bỏ qua build, test, hoặc kiểm tra version metadata.
+
+Thiết lập npm một lần cho maintainer:
+
+1. Đảm bảo package `codex-keyring` đã tồn tại trên npm, tài khoản npm của bạn có quyền ghi, và 2FA cấp account đã được bật.
+2. Chạy `npm trust github codex-keyring --repo ngoquocviet2001/codex-keyring --file release.yml --yes`.
+3. Nếu sau này cần xem hoặc thay trust relationship, dùng `npm trust list codex-keyring` và `npm trust revoke --id <id> codex-keyring`.
+
+Bước `npm trust github` ban đầu vẫn cần npm auth có quyền ghi và 2FA, nhưng sau đó workflow publish sẽ không còn cần `NPM_TOKEN` dài hạn, secret OAuth trên GitHub, hay bước `npm publish` thủ công nữa.
+
+Luồng release:
+
+1. Cập nhật `package.json`, `.codex-plugin/plugin.json`, và `CHANGELOG.md` về cùng một version.
+2. Push commit chứa thay đổi release.
+3. Tạo rồi push tag `vX.Y.Z`.
+4. Để `release.yml` tự publish package sau khi workflow pass.
 
 ## Khắc phục sự cố
 
@@ -213,6 +244,12 @@ codex-keyring add account2 --from-active
 ### Plugin không xuất hiện
 
 Hãy chạy `codex-keyring doctor`, xác nhận marketplace check đã pass, rồi restart Codex app hoặc reload IDE extension session.
+
+### `5h left` hoặc `week left` hiện `--`
+
+Trường hợp này thường có nghĩa là exact quota snapshot gần nhất đã đi qua mốc `resetAt`, nhưng Codex vẫn chưa phát ra host signal mới hơn. `codex-keyring` giờ ưu tiên ẩn quota stale thay vì tiếp tục hiện `0%` cũ hoặc số còn lại cũ như thể nó vẫn exact.
+
+Hãy chạy `codex-keyring stats <alias>` để xem thời điểm quan sát gần nhất và phần note giải thích. Cột `confidence` trong `list` và `status` cũng cho biết quota còn lại đang là exact, estimated hay manual.
 
 ### Account mới thêm không có cùng Codex UI settings
 

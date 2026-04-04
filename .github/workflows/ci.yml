@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 20.19.0
+          - os: ubuntu-latest
+            node: 22.14.0
+          - os: windows-latest
+            node: 22.14.0
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Use npm 11.11.0
+        run: npm install --global npm@11.11.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify build, tests, and release metadata
+        run: npm run release:verify
+
+      - name: Create package tarball
+        run: npm pack
+
+      - name: Locate package tarball
+        id: tarball
+        shell: pwsh
+        run: |
+          $tgz = Get-ChildItem -Path *.tgz | Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $tgz) {
+            throw "No npm pack tarball found."
+          }
+          "path=$($tgz.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Install tarball globally
+        run: npm install --global "${{ steps.tarball.outputs.path }}"
+
+      - name: Prepare isolated home directory
+        shell: pwsh
+        run: |
+          $smokeHome = Join-Path $env:RUNNER_TEMP "codex-keyring-home"
+          New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
+          "SMOKE_HOME=$smokeHome" >> $env:GITHUB_ENV
+
+      - name: Smoke-test codex-keyring install
+        run: codex-keyring install --json
+        env:
+          HOME: ${{ env.SMOKE_HOME }}
+          USERPROFILE: ${{ env.SMOKE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.SMOKE_HOME }}
+
+      - name: Smoke-test codex-keyring doctor
+        run: codex-keyring doctor --json
+        env:
+          HOME: ${{ env.SMOKE_HOME }}
+          USERPROFILE: ${{ env.SMOKE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.SMOKE_HOME }}
