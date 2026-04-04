@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2
+
+- Publish the quota-reconciliation and auto-switch fixes from the rebased `main` branch under a clean release tag so npm and GitHub releases point at the same source revision
+- Keep exact 5-hour and weekly remaining quota fresh across manual account switches by reading `token_count` session events that happen after `lastSwitchAt`, even when the Codex session itself started earlier
+- Re-enable the documented `balanced` startup rebalance behavior when exact live quota telemetry shows the active alias has dropped below the configured threshold, while still keeping `sequential` conservative
+- Improve host-log alias attribution and existing-alias CLI resolution so auto-switch decisions stay accurate and commands fail clearly instead of surfacing raw `ENOENT`
+
 ## 0.6.1
 
 - Keep exact 5-hour and weekly remaining quota fresh across manual account switches by reading `token_count` session events that happen after `lastSwitchAt`, even when the Codex session itself started earlier
