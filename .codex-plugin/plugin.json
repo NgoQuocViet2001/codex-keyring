@@ -1,6 +1,6 @@
 {
   "name": "codex-keyring",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Native multi-account manager for Codex with quota-aware switching and smoother auto-switch failover.",
   "author": {
     "name": "NgoQuocViet2001",

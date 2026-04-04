@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5
+
+- Classify OpenAI `insufficient quota` and `insufficient_quota` failures as `quota-exhausted` so supported auto-switch failover still triggers for that quota error family
+- Keep the classifier narrow enough to avoid treating generic quota discussion text as a real failover signal
+
 ## 0.5.4
 
 - Classify common Codex `403 Forbidden` workspace and organization policy failures as `workspace-mismatch` so supported failover can still trigger
