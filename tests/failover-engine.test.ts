@@ -59,6 +59,8 @@ describe("failover-engine", () => {
     expect(classifyFailure("Unauthorized: expired token")).toBe("auth-expired");
     expect(classifyFailure("quota exhausted for this plan")).toBe("quota-exhausted");
     expect(classifyFailure('{"type":"usage_limit_reached"}')).toBe("quota-exhausted");
+    expect(classifyFailure("OpenAI API error: insufficient quota")).toBe("quota-exhausted");
+    expect(classifyFailure('{"error":{"code":"insufficient_quota"}}')).toBe("quota-exhausted");
     expect(classifyFailure("Mình muốn thêm quota 5h và quota tuần cho command stats")).toBeUndefined();
   });
 
