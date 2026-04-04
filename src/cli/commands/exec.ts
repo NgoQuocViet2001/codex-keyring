@@ -18,6 +18,79 @@ interface ManagedRunResult extends CapturedCommandResult {
   liveSwitchedAliases: string[];
 }
 
+interface ExecParentTtyState {
+  stdinIsTTY: boolean;
+  stdoutIsTTY: boolean;
+  stderrIsTTY: boolean;
+}
+
+const CODEX_OPTIONS_WITH_VALUE = new Set([
+  "-c",
+  "--config",
+  "--enable",
+  "--disable",
+  "--remote",
+  "--remote-auth-token-env",
+  "-i",
+  "--image",
+  "-m",
+  "--model",
+  "--local-provider",
+  "-p",
+  "--profile",
+  "-s",
+  "--sandbox",
+  "-a",
+  "--ask-for-approval",
+  "-C",
+  "--cd",
+  "--add-dir",
+]);
+
+const CODEX_NON_INTERACTIVE_SUBCOMMANDS = new Set(["exec", "review"]);
+
+function firstCodexPositionalArg(args: string[]): string | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (!token) {
+      continue;
+    }
+    if (token === "--") {
+      return args[index + 1];
+    }
+    if (CODEX_OPTIONS_WITH_VALUE.has(token)) {
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      continue;
+    }
+    return token;
+  }
+
+  return undefined;
+}
+
+export function shouldPreserveInteractiveCodexTty(
+  command: string,
+  args: string[],
+  ttyState: ExecParentTtyState = {
+    stdinIsTTY: Boolean(process.stdin.isTTY),
+    stdoutIsTTY: Boolean(process.stdout.isTTY),
+    stderrIsTTY: Boolean(process.stderr.isTTY),
+  },
+): boolean {
+  if (command !== "codex") {
+    return false;
+  }
+  if (!ttyState.stdinIsTTY || !ttyState.stdoutIsTTY || !ttyState.stderrIsTTY) {
+    return false;
+  }
+
+  const positional = firstCodexPositionalArg(args);
+  return positional ? !CODEX_NON_INTERACTIVE_SUBCOMMANDS.has(positional) : true;
+}
+
 async function runCommandWithCapture(
   command: string,
   args: string[],
@@ -27,20 +100,39 @@ async function runCommandWithCapture(
 ): Promise<CapturedCommandResult> {
   return new Promise((resolve, reject) => {
     const invocation = command === "codex" ? createCodexInvocation(args) : { command, args };
+    const preserveInteractiveTty = shouldPreserveInteractiveCodexTty(command, args);
     const child = spawn(invocation.command, invocation.args, {
       env: process.env,
       shell: invocation.shell,
-      stdio: ["inherit", "pipe", "pipe"],
+      stdio: preserveInteractiveTty ? "inherit" : ["inherit", "pipe", "pipe"],
     });
 
     let output = "";
-    child.stdout.on("data", (chunk: Buffer) => {
+    if (preserveInteractiveTty) {
+      child.on("error", reject);
+      child.on("exit", (code: number | null) => {
+        resolve({
+          exitCode: code ?? 1,
+          output,
+        });
+      });
+      return;
+    }
+
+    const stdout = child.stdout;
+    const stderr = child.stderr;
+    if (!stdout || !stderr) {
+      reject(new Error("Expected piped stdout/stderr for captured command execution."));
+      return;
+    }
+
+    stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       output += text;
       process.stdout.write(text);
       options.onOutputChunk?.(text);
     });
-    child.stderr.on("data", (chunk: Buffer) => {
+    stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       output += text;
       process.stderr.write(text);
