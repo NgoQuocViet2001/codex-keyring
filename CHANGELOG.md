@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3
+
+- Switch GitHub Actions npm publishing to the repository `NPM_TOKEN` secret so release tags can publish even when npm trusted publishing is not configured correctly
+- Publish the verified quota-reconciliation and auto-switch fixes through a clean CI-driven release from the corrected `main` branch
+- Normalize the GitHub repository URLs in package metadata to match the canonical repository casing used by release tooling
+
 ## 0.6.2
 
 - Publish the quota-reconciliation and auto-switch fixes from the rebased `main` branch under a clean release tag so npm and GitHub releases point at the same source revision

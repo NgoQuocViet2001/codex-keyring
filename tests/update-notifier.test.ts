@@ -60,6 +60,7 @@ describe("update-notifier", () => {
       stdoutTTY: true,
       fetchImpl: fetchVersion("0.6.0"),
       promptChoice,
+      now: () => new Date("2026-04-05T00:00:00.000Z"),
     });
     const second = await maybePromptForUpdate({
       packageName: "codex-keyring",
@@ -70,6 +71,7 @@ describe("update-notifier", () => {
       stdoutTTY: true,
       fetchImpl: fetchVersion("0.6.0"),
       promptChoice,
+      now: () => new Date("2026-04-05T00:05:00.000Z"),
     });
     const third = await maybePromptForUpdate({
       packageName: "codex-keyring",
@@ -80,7 +82,7 @@ describe("update-notifier", () => {
       stdoutTTY: true,
       fetchImpl: fetchVersion("0.6.1"),
       promptChoice,
-      now: () => new Date("2026-04-05T12:00:00.000Z"),
+      now: () => new Date("2026-04-05T13:00:00.000Z"),
     });
 
     expect(first.status).toBe("skip");

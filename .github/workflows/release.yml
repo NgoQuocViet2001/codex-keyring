@@ -18,9 +18,9 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Set up Node.js for npm trusted publishing
+      - name: Set up Node.js for npm publish
         uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
@@ -82,7 +82,9 @@ jobs:
           XDG_CONFIG_HOME: ${{ env.SMOKE_HOME }}
 
       - name: Publish to npm with provenance
-        run: npm publish --access public --provenance
+        run: npm publish "${{ steps.tarball.outputs.path }}" --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub release
         env:
