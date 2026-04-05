@@ -54,12 +54,6 @@ Khi npm đã có bản mới hơn, các lệnh `codex-keyring` chạy ở chế 
 
 Các luồng máy-đọc như `--json`, `--help`, `--version`, và `codex-keyring mcp` sẽ không bị chèn prompt để tránh làm bẩn script hoặc stdio của MCP.
 
-## Mẹo cập nhật
-
-Khi npm đã có bản mới hơn, các lệnh `codex-keyring` chạy ở chế độ interactive giờ sẽ hiện một prompt gọn để người dùng chọn `Update now` hoặc `Skip this version`.
-
-Các luồng máy-đọc như `--json`, `--help`, `--version`, và `codex-keyring mcp` sẽ không bị chèn prompt để tránh làm bẩn script hoặc stdio của MCP.
-
 ## Sử dụng trong Codex App và IDE
 
 Sau khi chạy `codex-keyring install`:
@@ -197,29 +191,6 @@ Nếu xóa alias đang active, cần thêm `--force`.
 | `codex-keyring uninstall` | gỡ plugin khỏi marketplace | dữ liệu store vẫn còn |
 | `codex-keyring doctor` | kiểm tra tình trạng môi trường | nên chạy sau khi install |
 | `codex-keyring mcp` | chạy stdio MCP server | dùng cho tích hợp nâng cao |
-
-## CI/CD và Release
-
-Repo giờ có hai lớp automation:
-
-- `.github/workflows/ci.yml` chạy `build`, `test`, `release:check`, `npm pack`, smoke test cài `.tgz` global, `codex-keyring install`, và `codex-keyring doctor` trên cả Ubuntu lẫn Windows.
-- `.github/workflows/release.yml` tự publish package lên npm khi bạn push tag như `vX.Y.Z`, dùng npm trusted publishing qua GitHub Actions OIDC.
-- `prepack` và `prepublishOnly` đều chạy `npm run release:verify`, nên `npm pack` và `npm publish` local không thể bỏ qua build, test, hoặc kiểm tra version metadata.
-
-Thiết lập npm một lần cho maintainer:
-
-1. Đảm bảo package `codex-keyring` đã tồn tại trên npm, tài khoản npm của bạn có quyền ghi, và 2FA cấp account đã được bật.
-2. Chạy `npm trust github codex-keyring --repo ngoquocviet2001/codex-keyring --file release.yml --yes`.
-3. Nếu sau này cần xem hoặc thay trust relationship, dùng `npm trust list codex-keyring` và `npm trust revoke --id <id> codex-keyring`.
-
-Bước `npm trust github` ban đầu vẫn cần npm auth có quyền ghi và 2FA, nhưng sau đó workflow publish sẽ không còn cần `NPM_TOKEN` dài hạn, secret OAuth trên GitHub, hay bước `npm publish` thủ công nữa.
-
-Luồng release:
-
-1. Cập nhật `package.json`, `.codex-plugin/plugin.json`, và `CHANGELOG.md` về cùng một version.
-2. Push commit chứa thay đổi release.
-3. Tạo rồi push tag `vX.Y.Z`.
-4. Để `release.yml` tự publish package sau khi workflow pass.
 
 ## Khắc phục sự cố
 

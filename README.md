@@ -54,12 +54,6 @@ When a newer npm release is available, interactive `codex-keyring` commands show
 
 Machine-readable flows such as `--json`, `--help`, `--version`, and `codex-keyring mcp` stay quiet so scripts and MCP stdio are not polluted.
 
-## Update Tip
-
-When a newer npm release is available, interactive `codex-keyring` commands now show a lightweight prompt so the user can choose `Update now` or `Skip this version`.
-
-Machine-readable flows such as `--json`, `--help`, `--version`, and `codex-keyring mcp` stay quiet so scripts and MCP stdio are not polluted.
-
 ## Use In Codex App And IDE
 
 After `codex-keyring install`:
@@ -197,29 +191,6 @@ Removing the active alias requires `--force`.
 | `codex-keyring uninstall` | remove the plugin from the marketplace | store data remains |
 | `codex-keyring doctor` | inspect environment health | recommended after install |
 | `codex-keyring mcp` | run the stdio MCP server | advanced integration use |
-
-## CI/CD And Release
-
-This repository now includes two automation layers:
-
-- `.github/workflows/ci.yml` runs `build`, `test`, `release:check`, `npm pack`, global `.tgz` install smoke, `codex-keyring install`, and `codex-keyring doctor` on both Ubuntu and Windows.
-- `.github/workflows/release.yml` publishes the package to npm automatically from a pushed tag such as `vX.Y.Z`, using npm trusted publishing over GitHub Actions OIDC.
-- `prepack` and `prepublishOnly` both run `npm run release:verify`, so local `npm pack` and `npm publish` cannot skip build, tests, or version metadata checks.
-
-One-time npm setup for maintainers:
-
-1. Make sure `codex-keyring` already exists on npm, your npm account has write access, and npm account-level 2FA is enabled.
-2. Run `npm trust github codex-keyring --repo ngoquocviet2001/codex-keyring --file release.yml --yes`.
-3. If you need to inspect or replace the trust relationship later, use `npm trust list codex-keyring` and `npm trust revoke --id <id> codex-keyring`.
-
-The initial `npm trust github` step still requires npm authentication with write access and 2FA, but after that the publish workflow no longer needs a long-lived `NPM_TOKEN`, browser OAuth secret, or manual `npm publish` step in GitHub Actions.
-
-Release flow:
-
-1. Update `package.json`, `.codex-plugin/plugin.json`, and `CHANGELOG.md` to the same version.
-2. Push the commit that contains the release changes.
-3. Create and push tag `vX.Y.Z`.
-4. Let `release.yml` publish the package automatically after the workflow passes.
 
 ## Troubleshooting
 
