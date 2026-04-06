@@ -104,6 +104,34 @@ function describeStaleQuotaWindows(stale5h: boolean, staleWeek: boolean): string
   return "The latest weekly quota snapshot has passed its reset time, so codex-keyring is waiting for a fresh Codex signal before reporting new remaining quota.";
 }
 
+function quotaSnapshotInvalidatedByQuotaFailure(
+  quotaSnapshot: QuotaSnapshot | undefined,
+  lastQuotaCooldownAt: string | undefined,
+): boolean {
+  if (!quotaSnapshot?.capturedAt || !lastQuotaCooldownAt) {
+    return false;
+  }
+
+  const quotaSnapshotMs = Date.parse(quotaSnapshot.capturedAt);
+  const lastQuotaCooldownMs = Date.parse(lastQuotaCooldownAt);
+  if (Number.isNaN(quotaSnapshotMs) || Number.isNaN(lastQuotaCooldownMs)) {
+    return false;
+  }
+
+  return quotaSnapshotMs < lastQuotaCooldownMs;
+}
+
+function discardQuotaSnapshotAfterQuotaFailure(
+  quotaSnapshot: QuotaSnapshot | undefined,
+  lastQuotaCooldownAt: string | undefined,
+): QuotaSnapshot | undefined {
+  if (quotaSnapshotInvalidatedByQuotaFailure(quotaSnapshot, lastQuotaCooldownAt)) {
+    return undefined;
+  }
+
+  return quotaSnapshot;
+}
+
 function quotaRecoveredAfterLimitHit(
   quotaSnapshot: QuotaSnapshot | undefined,
   lastLimitHitAt: string | undefined,
@@ -135,9 +163,14 @@ function summarizeQuotaNote(
   quotaRecovered: boolean,
   stale5h: boolean,
   staleWeek: boolean,
+  quotaSnapshotSuppressed: boolean,
 ): string {
   if (meta.manualWindow) {
     return "Quota window is manually annotated.";
+  }
+
+  if (quotaSnapshotSuppressed) {
+    return "A newer quota or rate-limit failure was observed after the latest quota snapshot, so codex-keyring is waiting for a fresh Codex signal before reporting exact remaining quota again.";
   }
 
   const staleWindowNote = describeStaleQuotaWindows(stale5h, staleWeek);
@@ -286,20 +319,12 @@ export async function refreshStatsForAlias(store: AccountStore, alias: string): 
   const lifecycleEvents = scopeEventsToCurrentAliasLifecycle(lineageEvents);
   const relatedEvents = mergeRelatedEvents(lifecycleEvents, allEvents, collectIdentityEmails(meta, snapshot));
 
-  const quotaSnapshot = pickFreshestQuotaSnapshot(
+  const rawQuotaSnapshot = pickFreshestQuotaSnapshot(
     latestQuotaSnapshot(relatedEvents),
     await readQuotaSnapshotFromHostLogIds(store, relatedEvents),
     await readQuotaSnapshotFromActiveSession(store, alias, state.activeAlias, state.lastSwitchAt),
   );
-  const observedLimit5h = pickQuotaWindow(quotaSnapshot, 300);
-  const observedLimitWeek = pickQuotaWindow(quotaSnapshot, 10_080);
-  const limit5h = liveQuotaWindow(observedLimit5h, now);
-  const limitWeek = liveQuotaWindow(observedLimitWeek, now);
-  const staleLimit5h = Boolean(observedLimit5h) && !limit5h;
-  const staleLimitWeek = Boolean(observedLimitWeek) && !limitWeek;
-  const hasLiveQuota = Boolean(limit5h || limitWeek);
-
-  const windowType = quotaSnapshot ? "codex-rate-limits" : meta.manualWindow ? `manual:${meta.manualWindow.type}` : "rolling-24h";
+  const windowType = rawQuotaSnapshot ? "codex-rate-limits" : meta.manualWindow ? `manual:${meta.manualWindow.type}` : "rolling-24h";
   const hours = rollingWindowHours(windowType);
   const windowStart = now - hours * 60 * 60 * 1_000;
   const windowEvents = relatedEvents.filter((event) => Date.parse(event.timestamp) >= windowStart);
@@ -308,6 +333,15 @@ export async function refreshStatsForAlias(store: AccountStore, alias: string): 
   const requestEvents = windowEvents.filter((event) => event.type === "exec-success" || event.type === "exec-failure");
   const lastLimitHitAt = limitHits.at(-1)?.timestamp;
   const lastQuotaCooldownAt = quotaCooldownEvents.at(-1)?.timestamp;
+  const quotaSnapshot = discardQuotaSnapshotAfterQuotaFailure(rawQuotaSnapshot, lastQuotaCooldownAt);
+  const quotaSnapshotSuppressed = Boolean(rawQuotaSnapshot) && !quotaSnapshot;
+  const observedLimit5h = pickQuotaWindow(quotaSnapshot, 300);
+  const observedLimitWeek = pickQuotaWindow(quotaSnapshot, 10_080);
+  const limit5h = liveQuotaWindow(observedLimit5h, now);
+  const limitWeek = liveQuotaWindow(observedLimitWeek, now);
+  const staleLimit5h = Boolean(observedLimit5h) && !limit5h;
+  const staleLimitWeek = Boolean(observedLimitWeek) && !limitWeek;
+  const hasLiveQuota = Boolean(limit5h || limitWeek);
   const cooldownUntil = deriveCooldownUntil(lastQuotaCooldownAt, limit5h?.remainingPercent === 0 ? limit5h.resetAt : undefined);
   const quotaRecovered = quotaRecoveredAfterLimitHit(
     quotaSnapshot,
@@ -337,7 +371,7 @@ export async function refreshStatsForAlias(store: AccountStore, alias: string): 
     estimatedRequestsThisWindow: requestEvents.length > 0 ? requestEvents.length : undefined,
     estimatedTokensThisWindow: meta.manualWindow?.tokensPerWindow,
     windowType,
-    notes: summarizeQuotaNote(meta, quotaSnapshot, quotaRecovered, staleLimit5h, staleLimitWeek),
+    notes: summarizeQuotaNote(meta, quotaSnapshot, quotaRecovered, staleLimit5h, staleLimitWeek, quotaSnapshotSuppressed),
   };
 
   await store.saveStats(alias, stats);

@@ -55,10 +55,12 @@ const FAR_FUTURE = "2999-01-01T00:00:00.000Z";
 describe("failover-engine", () => {
   it("classifies supported quota and auth failures", () => {
     expect(classifyFailure("429 rate limit exceeded")).toBe("rate-limited");
+    expect(classifyFailure("rate_limit_exceeded")).toBe("rate-limited");
     expect(classifyFailure("Your workspace policy blocks this action")).toBe("workspace-mismatch");
     expect(classifyFailure("Unauthorized: expired token")).toBe("auth-expired");
     expect(classifyFailure("quota exhausted for this plan")).toBe("quota-exhausted");
     expect(classifyFailure('{"type":"usage_limit_reached"}')).toBe("quota-exhausted");
+    expect(classifyFailure("You've hit your usage limit. Try again later.")).toBe("quota-exhausted");
     expect(classifyFailure("OpenAI API error: insufficient quota")).toBe("quota-exhausted");
     expect(classifyFailure('{"error":{"code":"insufficient_quota"}}')).toBe("quota-exhausted");
     expect(classifyFailure("Mình muốn thêm quota 5h và quota tuần cho command stats")).toBeUndefined();

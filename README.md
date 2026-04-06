@@ -31,7 +31,7 @@ After installation, `Codex Keyring` is available as a plugin inside Codex app an
 
 You can ask a Codex agent to inspect accounts, switch aliases, rename aliases, run `doctor`, or guide the next step for you through natural-language requests.
 
-When auto-switch is enabled, `Codex Keyring` also does best-effort reconciliation from recent Codex host quota signals so the next request or reopened session can move away from a limited alias.
+When auto-switch is enabled, `Codex Keyring` also does best-effort reconciliation from recent Codex host quota signals so the next request or reopened session can move away from a limited alias. If the host SQLite log is missing or unreadable, it now falls back to recent Codex session failures as well instead of relying on quota snapshots alone.
 
 ## Quick Start For Multi-Account Switching
 
@@ -137,7 +137,7 @@ If you want the most predictable day-to-day behavior, start with `sequential`. I
 
 `codex-keyring exec` can now switch the active auth cache as soon as a live CLI session emits a supported quota or auth failure. If the process still exits, it retries one fresh process exactly once after the failover.
 
-For Codex app and the IDE extension, `codex-keyring` also reconciles recent host-side quota, rate-limit, auth-expiry, and workspace-mismatch signals so the next request or reopened session can pick up another alias. In `balanced` mode, that reconciliation can now proactively rebalance when exact live quota shows the active alias has already fallen past the rebalance threshold. In-flight requests still do not continue seamlessly after the failure that already happened.
+For Codex app and the IDE extension, `codex-keyring` also reconciles recent host-side quota, rate-limit, auth-expiry, and workspace-mismatch signals so the next request or reopened session can pick up another alias. When the host SQLite log is unavailable, the same best-effort reconciliation now also inspects recent session-log failures so a supported limit hit can still trigger failover in `sequential` mode. In `balanced` mode, that reconciliation can now proactively rebalance when exact live quota shows the active alias has already fallen past the rebalance threshold. In-flight requests still do not continue seamlessly after the failure that already happened.
 
 ### Keep One Alias Manual-Only
 
@@ -222,7 +222,7 @@ Run `codex-keyring doctor`, confirm the marketplace check passes, then restart C
 
 ### `5h left` or `week left` Shows `--`
 
-This usually means the last exact quota snapshot has already passed its `resetAt` boundary and Codex has not emitted a fresher host-side signal yet. `codex-keyring` now prefers hiding stale quota rather than showing an old `0%` or old remaining value as if it were still exact.
+This usually means the last exact quota snapshot has already passed its `resetAt` boundary, or a newer supported quota/rate-limit failure happened after that snapshot and Codex has not emitted fresher quota telemetry yet. `codex-keyring` now prefers hiding stale or invalidated quota rather than showing an old `0%` or old remaining value as if it were still exact.
 
 Run `codex-keyring stats <alias>` to inspect the latest observation time and note text. The `confidence` column in `list` and `status` also tells you whether the remaining quota is exact, estimated, or manual.
 

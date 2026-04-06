@@ -31,7 +31,7 @@ Sau khi cài xong, `Codex Keyring` sẽ khả dụng dưới dạng plugin trong
 
 Bạn có thể nhờ agent của Codex kiểm tra account, switch alias, rename alias, chạy `doctor`, hoặc hướng dẫn bước tiếp theo thông qua prompt ngôn ngữ tự nhiên.
 
-Khi bật auto-switch, `Codex Keyring` còn thực hiện best-effort reconciliation từ các tín hiệu quota gần đây do chính Codex host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể chuyển sang alias khác.
+Khi bật auto-switch, `Codex Keyring` còn thực hiện best-effort reconciliation từ các tín hiệu quota gần đây do chính Codex host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể chuyển sang alias khác. Nếu host SQLite log bị thiếu hoặc không đọc được, nó giờ cũng fallback sang các lỗi gần đây trong session log thay vì chỉ dựa vào quota snapshot cũ.
 
 ## Bắt đầu nhanh cho multi-account switching
 
@@ -137,7 +137,7 @@ Nếu bạn muốn hành vi ổn định và dễ đoán nhất để dùng hằ
 
 `codex-keyring exec` giờ có thể switch active auth cache ngay khi phiên CLI đang chạy phát ra lỗi quota hoặc auth được hỗ trợ. Nếu process vẫn thoát ra, nó sẽ retry đúng một tiến trình mới sau khi failover.
 
-Với Codex app và IDE extension, `codex-keyring` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Ở mode `balanced`, bước reconciliation này giờ cũng có thể rebalance chủ động khi exact live quota cho thấy alias đang active đã tụt xuống dưới ngưỡng chuyển. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
+Với Codex app và IDE extension, `codex-keyring` cũng thực hiện best-effort reconciliation từ các tín hiệu quota, rate-limit, auth-expiry, và workspace-mismatch do host ghi nhận, để request kế tiếp hoặc phiên mở lại có thể dùng alias khác. Khi host SQLite log không khả dụng, bước reconciliation này giờ cũng kiểm tra các failure gần đây trong session log để limit hit được hỗ trợ vẫn có thể kích hoạt failover ở mode `sequential`. Ở mode `balanced`, bước reconciliation này giờ cũng có thể rebalance chủ động khi exact live quota cho thấy alias đang active đã tụt xuống dưới ngưỡng chuyển. Request đã fail rồi thì vẫn không thể tiếp tục liền mạch giữa chừng.
 
 ### Giữ Một Alias Chỉ Switch Tay
 
@@ -222,7 +222,7 @@ Hãy chạy `codex-keyring doctor`, xác nhận marketplace check đã pass, r�
 
 ### `5h left` hoặc `week left` hiện `--`
 
-Trường hợp này thường có nghĩa là exact quota snapshot gần nhất đã đi qua mốc `resetAt`, nhưng Codex vẫn chưa phát ra host signal mới hơn. `codex-keyring` giờ ưu tiên ẩn quota stale thay vì tiếp tục hiện `0%` cũ hoặc số còn lại cũ như thể nó vẫn exact.
+Trường hợp này thường có nghĩa là exact quota snapshot gần nhất đã đi qua mốc `resetAt`, hoặc đã có một quota/rate-limit failure mới hơn xuất hiện sau snapshot đó nhưng Codex vẫn chưa phát ra telemetry quota mới. `codex-keyring` giờ ưu tiên ẩn quota stale hoặc đã bị invalid thay vì tiếp tục hiện `0%` cũ hoặc số còn lại cũ như thể nó vẫn exact.
 
 Hãy chạy `codex-keyring stats <alias>` để xem thời điểm quan sát gần nhất và phần note giải thích. Cột `confidence` trong `list` và `status` cũng cho biết quota còn lại đang là exact, estimated hay manual.
 

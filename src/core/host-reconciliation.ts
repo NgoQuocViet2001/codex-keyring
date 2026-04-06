@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { pathExists } from "../platform/codex-home.js";
 import type { AccountStore } from "./account-store.js";
 import { extractAuthIdentity } from "./auth-snapshot.js";
+import { findLatestSessionFailureObservation } from "./codex-session-log.js";
 import { classifyFailure, pickNextAlias, shouldAutoSwitch } from "./failover-engine.js";
 import { extractQuotaSnapshotFromText } from "./quota-snapshot.js";
 import { refreshAllStats } from "./stats-engine.js";
@@ -79,6 +80,20 @@ interface ReconciliationOptions {
 interface AutoSwitchEvaluation {
   allowRebalance?: boolean;
   reason?: FailoverReason;
+}
+
+function sessionFailureKey(details: Record<string, unknown> | undefined): string | undefined {
+  if (details?.source !== "codex-session-log") {
+    return undefined;
+  }
+
+  const sessionPath = typeof details.sessionPath === "string" ? details.sessionPath : undefined;
+  const sessionCapturedAt = typeof details.sessionCapturedAt === "string" ? details.sessionCapturedAt : undefined;
+  if (!sessionPath || !sessionCapturedAt) {
+    return undefined;
+  }
+
+  return `${sessionPath}::${sessionCapturedAt}`;
 }
 
 async function maybeSwitchActiveAlias(
@@ -548,103 +563,134 @@ export async function reconcileHostFailover(
       }
     : await readHostLogRowsFromSqlite(store);
 
-  if (!sourceResult.available) {
-    await refreshAllStats(store);
-    const refreshedRecords = await store.listAccounts();
-    const switchedTo = await maybeSwitchActiveAlias(
-      store,
-      state,
-      allowSwitch,
-      refreshedRecords,
-      { allowRebalance: canRebalanceFromLiveQuota(state, refreshedRecords) },
-    );
-    return {
-      available: false,
-      rowsScanned: 0,
-      appendedEvents: 0,
-      switchedTo,
-      reason: sourceResult.reason,
-    };
-  }
-
   const existingEvents = await store.listEvents(undefined, 5_000);
   const records = await store.listAccounts();
-  const activeAliasAtTimestamp = buildActiveAliasResolver(state, existingEvents);
-  const parsedRows = buildParsedRows(sourceResult.rows, records, activeAliasAtTimestamp);
-  const candidates = buildHostFailureCandidatesFromParsedRows(parsedRows);
-  const observations = buildHostQuotaObservationsFromParsedRows(parsedRows);
   const processedHostLogIds = new Set(
     existingEvents
       .map((event) => event.details?.hostLogId)
       .filter((value): value is number => typeof value === "number"),
   );
+  const processedSessionFailures = new Set(
+    existingEvents
+      .map((event) => sessionFailureKey(event.details))
+      .filter((value): value is string => Boolean(value)),
+  );
 
   let appendedEvents = 0;
   let latestActiveAliasReason: FailoverReason | undefined;
-  for (const candidate of candidates) {
-    if (processedHostLogIds.has(candidate.row.id)) {
-      continue;
-    }
+  let latestActiveAliasFailureAtMs: number | undefined;
 
-    await store.appendEvent({
-      id: randomUUID(),
-      timestamp: new Date(candidate.row.ts * 1_000).toISOString(),
-      type: "limit-hit",
-      alias: candidate.alias,
-      reason: candidate.reason,
-      details: {
-        source: "codex-host-log",
-        hostLogId: candidate.row.id,
-        threadId: candidate.row.threadId,
-        processUuid: candidate.row.processUuid,
+  if (sourceResult.available) {
+    const activeAliasAtTimestamp = buildActiveAliasResolver(state, existingEvents);
+    const parsedRows = buildParsedRows(sourceResult.rows, records, activeAliasAtTimestamp);
+    const candidates = buildHostFailureCandidatesFromParsedRows(parsedRows);
+    const observations = buildHostQuotaObservationsFromParsedRows(parsedRows);
+
+    for (const candidate of candidates) {
+      if (processedHostLogIds.has(candidate.row.id)) {
+        continue;
+      }
+
+      await store.appendEvent({
+        id: randomUUID(),
+        timestamp: new Date(candidate.row.ts * 1_000).toISOString(),
+        type: "limit-hit",
+        alias: candidate.alias,
+        reason: candidate.reason,
+        details: {
+          source: "codex-host-log",
+          hostLogId: candidate.row.id,
+          threadId: candidate.row.threadId,
+          processUuid: candidate.row.processUuid,
+          email: candidate.email,
+          quotaSnapshot: candidate.quotaSnapshot,
+        },
+      });
+      appendedEvents += 1;
+      processedHostLogIds.add(candidate.row.id);
+      await enrichAccountIdentityHints(store, candidate.alias, {
         email: candidate.email,
-        quotaSnapshot: candidate.quotaSnapshot,
-      },
-    });
-    appendedEvents += 1;
-    processedHostLogIds.add(candidate.row.id);
-    await enrichAccountIdentityHints(store, candidate.alias, {
-      email: candidate.email,
-      planType: candidate.quotaSnapshot?.planType,
-    });
+        planType: candidate.quotaSnapshot?.planType,
+      });
 
-    if (candidate.alias === state.activeAlias) {
-      latestActiveAliasReason = candidate.reason;
-    }
-  }
-
-  for (const observation of observations) {
-    if (processedHostLogIds.has(observation.row.id)) {
-      continue;
+      if (candidate.alias === state.activeAlias) {
+        latestActiveAliasReason = candidate.reason;
+        latestActiveAliasFailureAtMs = candidate.row.ts * 1_000;
+      }
     }
 
-    await store.appendEvent({
-      id: randomUUID(),
-      timestamp: new Date(observation.row.ts * 1_000).toISOString(),
-      type: "quota-observed",
-      alias: observation.alias,
-      details: {
-        source: "codex-host-log",
-        hostLogId: observation.row.id,
-        threadId: observation.row.threadId,
-        processUuid: observation.row.processUuid,
+    for (const observation of observations) {
+      if (processedHostLogIds.has(observation.row.id)) {
+        continue;
+      }
+
+      await store.appendEvent({
+        id: randomUUID(),
+        timestamp: new Date(observation.row.ts * 1_000).toISOString(),
+        type: "quota-observed",
+        alias: observation.alias,
+        details: {
+          source: "codex-host-log",
+          hostLogId: observation.row.id,
+          threadId: observation.row.threadId,
+          processUuid: observation.row.processUuid,
+          email: observation.email,
+          quotaSnapshot: observation.quotaSnapshot,
+        },
+      });
+      appendedEvents += 1;
+      processedHostLogIds.add(observation.row.id);
+      await enrichAccountIdentityHints(store, observation.alias, {
         email: observation.email,
-        quotaSnapshot: observation.quotaSnapshot,
-      },
-    });
-    appendedEvents += 1;
-    processedHostLogIds.add(observation.row.id);
-    await enrichAccountIdentityHints(store, observation.alias, {
-      email: observation.email,
-      planType: observation.quotaSnapshot.planType,
-    });
+        planType: observation.quotaSnapshot.planType,
+      });
+    }
+
+    if (sourceResult.latestId !== undefined) {
+      await store.saveHostLogState({
+        lastProcessedId: sourceResult.latestId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
   }
 
-  if (sourceResult.latestId !== undefined) {
-    await store.saveHostLogState({
-      lastProcessedId: sourceResult.latestId,
-      updatedAt: new Date().toISOString(),
-    });
+  const sessionFailureObservation =
+    state.activeAlias
+      ? await findLatestSessionFailureObservation(
+          store.env.codexHome,
+          state.lastSwitchAt ? { since: state.lastSwitchAt } : {},
+        )
+      : undefined;
+  if (sessionFailureObservation && state.activeAlias) {
+    const key = `${sessionFailureObservation.sessionPath}::${sessionFailureObservation.capturedAt}`;
+    const capturedAtMs = Date.parse(sessionFailureObservation.capturedAt);
+    const newerOrEqualHostFailure =
+      latestActiveAliasFailureAtMs !== undefined &&
+      !Number.isNaN(capturedAtMs) &&
+      latestActiveAliasFailureAtMs >= capturedAtMs;
+    if (!processedSessionFailures.has(key) && !newerOrEqualHostFailure) {
+      await store.appendEvent({
+        id: randomUUID(),
+        timestamp: sessionFailureObservation.capturedAt,
+        type: "limit-hit",
+        alias: state.activeAlias,
+        reason: sessionFailureObservation.reason,
+        details: {
+          source: "codex-session-log",
+          sessionPath: sessionFailureObservation.sessionPath,
+          sessionStartedAt: sessionFailureObservation.sessionStartedAt,
+          sessionCapturedAt: sessionFailureObservation.capturedAt,
+          quotaSnapshot: sessionFailureObservation.quotaSnapshot,
+        },
+      });
+      appendedEvents += 1;
+      latestActiveAliasReason = sessionFailureObservation.reason;
+      latestActiveAliasFailureAtMs = Number.isNaN(capturedAtMs) ? latestActiveAliasFailureAtMs : capturedAtMs;
+      processedSessionFailures.add(key);
+      await enrichAccountIdentityHints(store, state.activeAlias, {
+        planType: sessionFailureObservation.quotaSnapshot?.planType,
+      });
+    }
   }
 
   await refreshAllStats(store);
@@ -661,10 +707,11 @@ export async function reconcileHostFailover(
   );
 
   return {
-    available: true,
-    rowsScanned: sourceResult.rows.length,
+    available: sourceResult.available,
+    rowsScanned: sourceResult.available ? sourceResult.rows.length : 0,
     appendedEvents,
     switchedTo,
+    reason: sourceResult.available ? undefined : sourceResult.reason,
   };
 }
 

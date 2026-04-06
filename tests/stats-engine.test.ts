@@ -243,4 +243,43 @@ describe("stats-engine", () => {
     expect(stats.confidence).toBe("estimated");
     expect(stats.notes).toContain("waiting for a fresh Codex signal");
   });
+
+  it("stops reporting exact quota after a newer rate-limit hit invalidates the last snapshot", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-keyring-"));
+    const env = createEnv(tempDir);
+    await mkdir(path.dirname(env.codexAuthPath), { recursive: true });
+
+    const store = new AccountStore(env);
+    await store.upsertAccount("account1", snapshot("acct-1"));
+    const quotaObservedAt = new Date(Date.now() - 20 * 60 * 1_000).toISOString();
+    const limitHitAt = new Date(Date.now() - 10 * 60 * 1_000).toISOString();
+
+    await store.appendEvent({
+      id: randomUUID(),
+      timestamp: quotaObservedAt,
+      type: "quota-observed",
+      alias: "account1",
+      details: {
+        quotaSnapshot: quotaSnapshot(quotaObservedAt, 61, 87),
+      },
+    });
+    await store.appendEvent({
+      id: randomUUID(),
+      timestamp: limitHitAt,
+      type: "limit-hit",
+      alias: "account1",
+      reason: "rate-limited",
+      details: {
+        source: "codex-session-log",
+        sessionPath: path.join(env.codexHome, "sessions", "2026", "04", "03", "session-1.jsonl"),
+        sessionCapturedAt: limitHitAt,
+      },
+    });
+
+    const stats = await refreshStatsForAlias(store, "account1");
+    expect(stats.confidence).toBe("estimated");
+    expect(stats.limit5hRemainingPercent).toBeUndefined();
+    expect(stats.limitWeekRemainingPercent).toBeUndefined();
+    expect(stats.notes).toContain("newer quota or rate-limit failure");
+  });
 });

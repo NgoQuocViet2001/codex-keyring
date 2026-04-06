@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.4
+
+- Stop showing older exact quota remaining after a newer supported quota or rate-limit failure has already invalidated that snapshot, so `status`, `list`, and `stats` no longer lag behind real blocking state
+- Reconcile supported session-log failures for the active alias when the Codex host SQLite log is missing or unreadable, allowing `sequential` auto-switch to fail over from app and IDE limit hits more reliably
+- Recognize additional real-world limit strings such as `You've hit your usage limit` and `rate_limit_exceeded`, while keeping the classifier narrow enough to avoid generic quota discussion text
+
 ## 0.6.3
 
 - Switch GitHub Actions npm publishing to the repository `NPM_TOKEN` secret so release tags can publish even when npm trusted publishing is not configured correctly

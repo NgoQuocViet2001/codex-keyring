@@ -1,7 +1,9 @@
 import { open, readdir } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../platform/codex-home.js";
-import type { QuotaSnapshot, QuotaWindowSnapshot } from "./types.js";
+import { classifyFailure } from "./failover-engine.js";
+import { extractQuotaSnapshotFromText } from "./quota-snapshot.js";
+import type { FailoverReason, QuotaSnapshot, QuotaWindowSnapshot } from "./types.js";
 
 const MAX_SESSION_FILES = 12;
 const MAX_SESSION_TAIL_BYTES = 512 * 1024;
@@ -21,11 +23,25 @@ interface SessionMetaLine {
   };
 }
 
+interface SessionEventLine {
+  timestamp?: string;
+  type?: string;
+  payload?: Record<string, unknown>;
+}
+
 export interface SessionQuotaObservation {
   capturedAt: string;
   quotaSnapshot: QuotaSnapshot;
   sessionPath: string;
   sessionStartedAt?: string;
+}
+
+export interface SessionFailureObservation {
+  capturedAt: string;
+  reason: FailoverReason;
+  sessionPath: string;
+  sessionStartedAt?: string;
+  quotaSnapshot?: QuotaSnapshot;
 }
 
 function toIsoFromEpochSeconds(value?: number): string | undefined {
@@ -87,6 +103,87 @@ export function quotaSnapshotFromSessionRateLimits(rateLimits: unknown, captured
     primary,
     secondary,
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function appendClassifierPart(parts: string[], value: unknown): void {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (normalized) {
+      parts.push(normalized);
+    }
+    return;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    parts.push(String(value));
+  }
+}
+
+function buildSessionFailureClassifierText(payload: Record<string, unknown>): string {
+  const parts: string[] = [];
+  appendClassifierPart(parts, payload.type);
+  appendClassifierPart(parts, payload.code);
+  appendClassifierPart(parts, payload.message);
+  appendClassifierPart(parts, payload.status_code);
+
+  const error = asRecord(payload.error);
+  if (error) {
+    appendClassifierPart(parts, error.type);
+    appendClassifierPart(parts, error.code);
+    appendClassifierPart(parts, error.message);
+    appendClassifierPart(parts, error.status_code);
+  }
+
+  const headers = asRecord(payload.headers);
+  if (headers) {
+    parts.push(JSON.stringify(headers));
+  }
+
+  const rateLimits = asRecord(payload.rate_limits);
+  if (rateLimits) {
+    parts.push(JSON.stringify(rateLimits));
+  }
+
+  return parts.join(" ");
+}
+
+function sessionQuotaSnapshotFromPayload(payload: Record<string, unknown>, capturedAt: string): QuotaSnapshot | undefined {
+  return (
+    quotaSnapshotFromSessionRateLimits(payload.rate_limits, capturedAt) ??
+    extractQuotaSnapshotFromText(JSON.stringify(payload), capturedAt, "codex-session-log")
+  );
+}
+
+function inferFailureReasonFromRateLimits(
+  payload: Record<string, unknown>,
+  quotaSnapshot?: QuotaSnapshot,
+): FailoverReason | undefined {
+  const rateLimits = asRecord(payload.rate_limits);
+  if (!rateLimits) {
+    return undefined;
+  }
+
+  const allowed = typeof rateLimits.allowed === "boolean" ? rateLimits.allowed : undefined;
+  const limitReached = rateLimits.limit_reached === true;
+  const primaryUsedPercent = quotaSnapshot?.primary?.usedPercent;
+  const secondaryUsedPercent = quotaSnapshot?.secondary?.usedPercent;
+  if (!limitReached && allowed !== false) {
+    return undefined;
+  }
+
+  if (limitReached || primaryUsedPercent === 100 || secondaryUsedPercent === 100) {
+    return "quota-exhausted";
+  }
+
+  return "rate-limited";
 }
 
 async function collectSessionFiles(rootPath: string, output: SessionFileCandidate[]): Promise<void> {
@@ -237,6 +334,65 @@ function extractLatestQuotaObservation(
   return undefined;
 }
 
+function extractLatestFailureObservation(
+  tail: string,
+  filePath: string,
+  sessionStartedAt?: string,
+  sinceMs?: number,
+): SessionFailureObservation | undefined {
+  const lines = tail.split(/\r?\n/u).filter(Boolean).reverse();
+
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line) as SessionEventLine;
+      if (parsed.type !== "event_msg") {
+        continue;
+      }
+
+      const payload = asRecord(parsed.payload);
+      if (!payload) {
+        continue;
+      }
+
+      const capturedAt =
+        typeof parsed.timestamp === "string"
+          ? parsed.timestamp
+          : typeof payload.timestamp === "string"
+            ? payload.timestamp
+            : undefined;
+      if (!capturedAt || Number.isNaN(Date.parse(capturedAt))) {
+        continue;
+      }
+
+      const capturedAtMs = Date.parse(capturedAt);
+      if (!Number.isNaN(sinceMs ?? Number.NaN) && capturedAtMs < (sinceMs as number)) {
+        continue;
+      }
+
+      const quotaSnapshot = sessionQuotaSnapshotFromPayload(payload, capturedAt);
+      const reason =
+        classifyFailure(buildSessionFailureClassifierText(payload)) ??
+        classifyFailure(line) ??
+        inferFailureReasonFromRateLimits(payload, quotaSnapshot);
+      if (!reason) {
+        continue;
+      }
+
+      return {
+        capturedAt,
+        reason,
+        sessionPath: filePath,
+        sessionStartedAt,
+        quotaSnapshot,
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+}
+
 export async function findLatestSessionQuotaObservation(
   codexHome: string,
   options: {
@@ -264,6 +420,50 @@ export async function findLatestSessionQuotaObservation(
     const sessionStartedAt = parseSessionStartedAt(head);
     const tail = await readFileTail(entry.filePath, MAX_SESSION_TAIL_BYTES);
     const observation = extractLatestQuotaObservation(
+      tail,
+      entry.filePath,
+      sessionStartedAt,
+      Number.isNaN(sinceMs) ? undefined : sinceMs,
+    );
+    if (!observation) {
+      continue;
+    }
+
+    if (!bestObservation || Date.parse(observation.capturedAt) > Date.parse(bestObservation.capturedAt)) {
+      bestObservation = observation;
+    }
+  }
+
+  return bestObservation;
+}
+
+export async function findLatestSessionFailureObservation(
+  codexHome: string,
+  options: {
+    since?: string;
+  } = {},
+): Promise<SessionFailureObservation | undefined> {
+  const sessionsRoot = path.join(codexHome, "sessions");
+  if (!(await pathExists(sessionsRoot))) {
+    return undefined;
+  }
+
+  const sinceMs = options.since ? Date.parse(options.since) : Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60 * 1_000;
+  const recentFiles: SessionFileCandidate[] = [];
+  await collectSessionFiles(sessionsRoot, recentFiles);
+
+  const candidates = recentFiles
+    .filter((entry) => Number.isNaN(sinceMs) || entry.mtimeMs >= sinceMs)
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .slice(0, MAX_SESSION_FILES);
+
+  let bestObservation: SessionFailureObservation | undefined;
+
+  for (const entry of candidates) {
+    const head = await readFileHead(entry.filePath, SESSION_META_HEAD_BYTES);
+    const sessionStartedAt = parseSessionStartedAt(head);
+    const tail = await readFileTail(entry.filePath, MAX_SESSION_TAIL_BYTES);
+    const observation = extractLatestFailureObservation(
       tail,
       entry.filePath,
       sessionStartedAt,

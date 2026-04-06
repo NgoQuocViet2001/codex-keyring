@@ -30,6 +30,8 @@ const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
       /usage_limit_reached/i,
       /the usage limit has been reached/i,
       /usage limit has been reached/i,
+      /usage limit exceeded/i,
+      /you(?:'|’)ve hit your usage limit/i,
       /usage cap/i,
       /quota exhausted/i,
       /credits exhausted/i,
@@ -40,7 +42,7 @@ const PATTERN_TABLE: Array<{ reason: FailoverReason; patterns: RegExp[] }> = [
   },
   {
     reason: "rate-limited",
-    patterns: [/rate limit/i, /too many requests/i, /\b429\b/u, /status_code":429/i, /retry later/i],
+    patterns: [/rate limit/i, /rate_limit_exceeded/i, /too many requests/i, /\b429\b/u, /status_code":429/i, /retry later/i],
   },
 ];
 
